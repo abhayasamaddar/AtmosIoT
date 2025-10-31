@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Air Quality Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #2c7be5;
+            --secondary: #6c757d;
+            --success: #00a65a;
+            --warning: #ffc107;
+            --danger: #e74c3c;
+            --light: #f8f9fa;
+            --dark: #343a40;
+            --bg-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--bg-gradient);
+            color: var(--dark);
+            line-height: 1.6;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        header {
+            text-align: center;
+            padding: 30px 0;
+            color: white;
+        }
+        
+        h1 {
+            font-size: 2.8rem;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            margin-bottom: 20px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            overflow: hidden;
+            margin-bottom: 30px;
+        }
+        
+        .card-header {
+            background: var(--primary);
+            color: white;
+            padding: 20px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        
+        .card-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+        }
+        
+        .btn-primary {
+            background: var(--success);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #008d4c;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .btn-secondary {
+            background: var(--secondary);
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background: #5a6268;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .card-body {
+            padding: 0;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #eaeaea;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 300px;
+        }
+        
+        th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            color: var(--dark);
+            position: sticky;
+            top: 0;
+        }
+        
+        tr:hover {
+            background-color: #f1f9ff;
+        }
+        
+        .loading, .error {
+            padding: 40px;
+            text-align: center;
+            font-size: 18px;
+        }
+        
+        .loading {
+            color: var(--secondary);
+        }
+        
+        .error {
+            color: var(--danger);
+            font-weight: bold;
+        }
+        
+        .footer {
+            text-align: center;
+            color: white;
+            padding: 20px 0;
+            opacity: 0.8;
+            font-size: 0.9rem;
+        }
+        
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--success);
+        }
+        
+        .timestamp {
+            font-size: 0.9rem;
+            color: var(--secondary);
+        }
+        
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .card-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .controls {
+                width: 100%;
+                justify-content: space-between;
+            }
+            
+            table {
+                display: block;
+                overflow-x: auto;
+            }
+            
+            h1 {
+                font-size: 2.2rem;
+            }
+        }
+        
+        /* Animation for loading */
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .pulse {
+            animation: pulse 1.5s infinite;
+        }
+        
+        .stats-container {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+        
+        .stat-card {
+            flex: 1;
+            min-width: 200px;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--primary);
+            margin: 10px 0;
+        }
+        
+        .stat-label {
+            color: var(--secondary);
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Air Quality Dashboard</h1>
+            <p class="subtitle">Real-time environmental monitoring data</p>
+            <div class="status-indicator">
+                <div class="status-dot"></div>
+                <span>Live Data</span>
+                <span class="timestamp" id="current-time"></span>
+            </div>
+        </header>
+        
+        <div class="stats-container">
+            <div class="stat-card">
+                <div class="stat-label">Data Points</div>
+                <div class="stat-value" id="data-count">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Last Updated</div>
+                <div class="stat-value" id="last-updated">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Status</div>
+                <div class="stat-value">Active</div>
+            </div>
+        </div>
+        
+        <main>
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">Air Quality Measurements</div>
+                    <div class="controls">
+                        <button id="refresh-btn" class="btn btn-secondary">
+                            <i class="fas fa-sync-alt"></i>
+                            Refresh Data
+                        </button>
+                        <button id="download-btn" class="btn btn-primary">
+                            <i class="fas fa-download"></i>
+                            Download CSV
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="data" class="loading">Loading air quality data...</div>
+                </div>
+            </div>
+        </main>
+        
+        <footer class="footer">
+            <p>Air Quality Monitoring System &copy; 2023</p>
+        </footer>
+    </div>
+
+    <script>
+        // Update current time
+        function updateCurrentTime() {
+            const now = new Date();
+            const formatted = now.toLocaleString('en-US', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            document.getElementById('current-time').textContent = formatted;
+        }
+        
+        // Update time immediately and then every second
+        updateCurrentTime();
+        setInterval(updateCurrentTime, 1000);
+        
+        const supabaseUrl = 'https://fjfmgndbiespptmsnrff.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZqZm1nbmRiaWVzcHB0bXNucmZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjEyMzk0NzQsImV4cCI6MjA3NjgxNTQ3NH0.FH9L41cIKXH_mVbl7szkb_CDKoyKdw97gOUhDOYJFnQ';
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+
+        // Function to format timestamp
+        function formatTimestamp(timestamp) {
+            if (!timestamp) return 'N/A';
+            
+            try {
+                const date = new Date(timestamp);
+                return date.toLocaleString('en-US', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+            } catch (e) {
+                return timestamp;
+            }
+        }
+
+        // Function to download data as CSV
+        function downloadCSV(data) {
+            if (!data || data.length === 0) return;
+            
+            // Get headers
+            const headers = Object.keys(data[0]);
+            
+            // Create CSV content
+            let csvContent = headers.join(',') + '\n';
+            
+            // Add rows
+            data.forEach(row => {
+                const values = headers.map(header => {
+                    let value = row[header];
+                    
+                    // Format dates properly
+                    if (header.toLowerCase().includes('time') || header.toLowerCase().includes('date')) {
+                        value = formatTimestamp(value);
+                    }
+                    
+                    // Escape commas and quotes
+                    if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
+                        value = `"${value.replace(/"/g, '""')}"`;
+                    }
+                    
+                    return value;
+                });
+                csvContent += values.join(',') + '\n';
+            });
+            
+            // Create and trigger download
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', `air_quality_data_${new Date().toISOString().split('T')[0]}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        async function getData() {
+            const { data, error } = await supabase
+                .from('airquality')
+                .select('*');
+
+            if (error) {
+                document.getElementById('data').innerHTML = '<div class="error">Error: ' + error.message + '</div>';
+                return;
+            }
+
+            if (data.length === 0) {
+                document.getElementById('data').innerHTML = '<div class="error">No air quality data found</div>';
+                return;
+            }
+
+            // Update stats
+            document.getElementById('data-count').textContent = data.length;
+            if (data.length > 0) {
+                // Find the latest timestamp
+                let latestTimestamp = '';
+                data.forEach(row => {
+                    Object.entries(row).forEach(([key, value]) => {
+                        if ((key.toLowerCase().includes('time') || key.toLowerCase().includes('date')) && 
+                            value && value > latestTimestamp) {
+                            latestTimestamp = value;
+                        }
+                    });
+                });
+                
+                if (latestTimestamp) {
+                    document.getElementById('last-updated').textContent = formatTimestamp(latestTimestamp).split(',')[0];
+                }
+            }
+
+            let html = '<table><tr>';
+            // Create table headers
+            Object.keys(data[0]).forEach(key => {
+                html += `<th>${key}</th>`;
+            });
+            html += '</tr>';
+            
+            // Create table rows with formatted data
+            data.forEach(row => {
+                html += '<tr>';
+                Object.entries(row).forEach(([key, value]) => {
+                    // Format timestamp columns - specifically the second column
+                    const columnIndex = Object.keys(row).indexOf(key);
+                    if (columnIndex === 1) { // Second column (0-indexed)
+                        value = formatTimestamp(value);
+                    } else if (key.toLowerCase().includes('time') || key.toLowerCase().includes('date')) {
+                        value = formatTimestamp(value);
+                    }
+                    html += `<td title="${value}">${value}</td>`;
+                });
+                html += '</tr>';
+            });
+            
+            html += '</table>';
+            document.getElementById('data').innerHTML = html;
+            
+            // Store data for download
+            window.airQualityData = data;
+        }
+
+        // Event listeners
+        document.getElementById('refresh-btn').addEventListener('click', function() {
+            document.getElementById('data').innerHTML = '<div class="loading pulse">Refreshing data...</div>';
+            getData();
+        });
+        
+        document.getElementById('download-btn').addEventListener('click', function() {
+            if (window.airQualityData) {
+                downloadCSV(window.airQualityData);
+            } else {
+                alert('No data available to download. Please wait for data to load.');
+            }
+        });
+
+        // Initial data load
+        getData();
+    </script>
+</body>
+</html>

@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Air Quality Data Sync</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --primary: #3b82f6;
+            --primary-light: #93c5fd;
+            --secondary: #8b5cf6;
+            --secondary-light: #c4b5fd;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --dark: #1f2937;
+            --light: #f9fafb;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background-color: #f3f4f6;
+            color: var(--dark);
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        h1 {
+            color: var(--primary);
+            margin-bottom: 5px;
+        }
+        
+        .subtitle {
+            color: #6b7280;
+            font-size: 1rem;
+        }
+        
+        .status-container {
+            display: flex;
+            gap: 15px;
+        }
+        
+        .status-badge {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+        
+        .status-active {
+            background-color: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+        }
+        
+        .status-inactive {
+            background-color: rgba(239, 68, 68, 0.1);
+            color: var(--danger);
+        }
+        
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .card h2 {
+            margin-bottom: 15px;
+            color: var(--dark);
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .card h2 i {
+            color: var(--primary);
+        }
+        
+        .control-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .interval-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        
+        .interval-control {
+            background: #f8fafc;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid var(--primary);
+        }
+        
+        .interval-control.secondary {
+            border-left-color: var(--secondary);
+        }
+        
+        .interval-label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .interval-description {
+            font-size: 0.85rem;
+            color: #6b7280;
+            margin-bottom: 10px;
+        }
+        
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background-color: #2563eb;
+        }
+        
+        .btn-secondary {
+            background-color: var(--secondary);
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background-color: #7c3aed;
+        }
+        
+        .btn-success {
+            background-color: var(--success);
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background-color: #059669;
+        }
+        
+        .btn-danger {
+            background-color: var(--danger);
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background-color: #dc2626;
+        }
+        
+        .data-display {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        
+        .data-item {
+            background: #f8fafc;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid var(--primary);
+        }
+        
+        .data-label {
+            font-size: 0.9rem;
+            color: #6b7280;
+            margin-bottom: 5px;
+        }
+        
+        .data-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--dark);
+        }
+        
+        .data-unit {
+            font-size: 0.9rem;
+            color: #6b7280;
+            margin-left: 5px;
+        }
+        
+        .stats-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .stats-card {
+            background: #f8fafc;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        
+        .stats-title {
+            font-size: 0.9rem;
+            color: #6b7280;
+            margin-bottom: 10px;
+        }
+        
+        .stats-value {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: var(--dark);
+        }
+        
+        .logs {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .log-item {
+            padding: 10px 15px;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            gap: 15px;
+        }
+        
+        .log-time {
+            color: #6b7280;
+            font-size: 0.9rem;
+            min-width: 100px;
+        }
+        
+        .log-message {
+            flex: 1;
+        }
+        
+        .log-success {
+            color: var(--success);
+        }
+        
+        .log-error {
+            color: var(--danger);
+        }
+        
+        .log-info {
+            color: var(--primary);
+        }
+        
+        .log-secondary {
+            color: var(--secondary);
+        }
+        
+        .config-section {
+            margin-top: 30px;
+        }
+        
+        .config-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        .config-item {
+            margin-bottom: 15px;
+        }
+        
+        .config-item label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        
+        .config-item input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 1rem;
+        }
+        
+        @media (max-width: 768px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+            
+            .config-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .interval-controls {
+                grid-template-columns: 1fr;
+            }
+            
+            .stats-container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div>
+                <h1>Air Quality Data Sync</h1>
+                <p class="subtitle">Automatically sync Blynk API data to Supabase with dual intervals</p>
+            </div>
+            <div class="status-container">
+                <div id="status1" class="status-badge status-inactive">MINUTE: INACTIVE</div>
+                <div id="status2" class="status-badge status-inactive">SECOND: INACTIVE</div>
+            </div>
+        </header>
+        
+        <div class="dashboard">
+            <div class="card">
+                <h2><i>⚙️</i> Control Panel</h2>
+                <div class="control-panel">
+                    <div class="interval-controls">
+                        <div class="interval-control">
+                            <div class="interval-label"><i>⏱️</i> Minute Interval</div>
+                            <div class="interval-description">Regular data updates</div>
+                            <div>
+                                <label for="syncInterval1">Interval (minutes):</label>
+                                <input type="number" id="syncInterval1" min="1" value="5">
+                            </div>
+                            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                                <button id="startSync1" class="btn btn-primary" style="flex: 1;">
+                                    <i>▶️</i> Start
+                                </button>
+                                <button id="stopSync1" class="btn btn-danger" style="flex: 1;">
+                                    <i>⏹️</i> Stop
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="interval-control secondary">
+                            <div class="interval-label"><i>⚡</i> Second Interval</div>
+                            <div class="interval-description">Fast data updates</div>
+                            <div>
+                                <label for="syncInterval2">Interval (seconds):</label>
+                                <input type="number" id="syncInterval2" min="5" value="30">
+                            </div>
+                            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                                <button id="startSync2" class="btn btn-secondary" style="flex: 1;">
+                                    <i>▶️</i> Start
+                                </button>
+                                <button id="stopSync2" class="btn btn-danger" style="flex: 1;">
+                                    <i>⏹️</i> Stop
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button id="manualSync" class="btn btn-success">
+                        <i>🔄</i> Manual Sync Now
+                    </button>
+                    
+                    <button id="startAll" class="btn btn-primary">
+                        <i>🚀</i> Start All Intervals
+                    </button>
+                    
+                    <button id="stopAll" class="btn btn-danger">
+                        <i>🛑</i> Stop All Intervals
+                    </button>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2><i>📊</i> Latest Data</h2>
+                <div id="latestData" class="data-display">
+                    <div class="data-item">
+                        <div class="data-label">Temperature</div>
+                        <div class="data-value">--<span class="data-unit">°C</span></div>
+                    </div>
+                    <div class="data-item">
+                        <div class="data-label">Humidity</div>
+                        <div class="data-value">--<span class="data-unit">%</span></div>
+                    </div>
+                    <div class="data-item">
+                        <div class="data-label">CO2</div>
+                        <div class="data-value">--<span class="data-unit">ppm</span></div>
+                    </div>
+                    <div class="data-item">
+                        <div class="data-label">CO</div>
+                        <div class="data-value">--<span class="data-unit">ppm</span></div>
+                    </div>
+                    <div class="data-item">
+                        <div class="data-label">PM2.5</div>
+                        <div class="data-value">--<span class="data-unit">μg/m³</span></div>
+                    </div>
+                    <div class="data-item">
+                        <div class="data-label">PM10</div>
+                        <div class="data-value">--<span class="data-unit">μg/m³</span></div>
+                    </div>
+                    <div class="data-item">
+                        <div class="data-label">Light</div>
+                        <div class="data-value">--<span class="data-unit">lux</span></div>
+                    </div>
+                    <div class="data-item">
+                        <div class="data-label">Rain</div>
+                        <div class="data-value">--<span class="data-unit">mm</span></div>
+                    </div>
+                </div>
+                
+                <div class="stats-container">
+                    <div class="stats-card">
+                        <div class="stats-title">Minute Interval Syncs</div>
+                        <div id="minuteSyncCount" class="stats-value">0</div>
+                    </div>
+                    <div class="stats-card">
+                        <div class="stats-title">Second Interval Syncs</div>
+                        <div id="secondSyncCount" class="stats-value">0</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2><i>📝</i> Activity Log</h2>
+            <div id="logContainer" class="logs">
+                <div class="log-item">
+                    <div class="log-time">Initializing...</div>
+                    <div class="log-message">System ready. Configure and start sync intervals.</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="config-section">
+            <div class="card">
+                <h2><i>🔧</i> Configuration</h2>
+                <div class="config-grid">
+                    <div>
+                        <div class="config-item">
+                            <label for="supabaseUrl">Supabase URL</label>
+                            <input type="text" id="supabaseUrl" value="https://fjfmgndbiespptmsnrff.supabase.co">
+                        </div>
+                        <div class="config-item">
+                            <label for="supabaseKey">Supabase Anon Key</label>
+                            <input type="text" id="supabaseKey" value="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZqZm1nbmRiaWVzcHB0bXNucmZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjEyMzk0NzQsImV4cCI6MjA3NjgxNTQ3NH0.FH9L41cIKXH_mVbl7szkb_CDKoyKdw97gOUhDOYJFnQ">
+                        </div>
+                    </div>
+                    <div>
+                        <div class="config-item">
+                            <label for="blynkToken">Blynk API Token</label>
+                            <input type="text" id="blynkToken" value="aBt1RXmeHshX2N-d3nzOWcqB-HOCUf8S">
+                        </div>
+                        <div class="config-item">
+                            <label for="tableName">Table Name</label>
+                            <input type="text" id="tableName" value="airquality">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Supabase configuration
+        const supabaseUrl = document.getElementById('supabaseUrl').value;
+        const supabaseKey = document.getElementById('supabaseKey').value;
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+        
+        // DOM elements
+        const startSyncBtn1 = document.getElementById('startSync1');
+        const stopSyncBtn1 = document.getElementById('stopSync1');
+        const startSyncBtn2 = document.getElementById('startSync2');
+        const stopSyncBtn2 = document.getElementById('stopSync2');
+        const manualSyncBtn = document.getElementById('manualSync');
+        const startAllBtn = document.getElementById('startAll');
+        const stopAllBtn = document.getElementById('stopAll');
+        const statusBadge1 = document.getElementById('status1');
+        const statusBadge2 = document.getElementById('status2');
+        const logContainer = document.getElementById('logContainer');
+        const latestDataContainer = document.getElementById('latestData');
+        const syncIntervalInput1 = document.getElementById('syncInterval1');
+        const syncIntervalInput2 = document.getElementById('syncInterval2');
+        const minuteSyncCountEl = document.getElementById('minuteSyncCount');
+        const secondSyncCountEl = document.getElementById('secondSyncCount');
+        
+        // Global variables
+        let syncInterval1 = null;
+        let syncInterval2 = null;
+        let isSyncing1 = false;
+        let isSyncing2 = false;
+        let minuteSyncCount = 0;
+        let secondSyncCount = 0;
+        
+        // Add log entry
+        function addLog(message, type = 'info', source = 'System') {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString();
+            
+            const logItem = document.createElement('div');
+            logItem.className = 'log-item';
+            logItem.innerHTML = `
+                <div class="log-time">${timeString}</div>
+                <div class="log-message log-${type}"><strong>${source}:</strong> ${message}</div>
+            `;
+            
+            logContainer.appendChild(logItem);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+        
+        // Update latest data display
+        function updateDataDisplay(data) {
+            const dataItems = latestDataContainer.querySelectorAll('.data-item');
+            
+            dataItems[0].querySelector('.data-value').innerHTML = `${data.temperature}<span class="data-unit">°C</span>`;
+            dataItems[1].querySelector('.data-value').innerHTML = `${data.humidity}<span class="data-unit">%</span>`;
+            dataItems[2].querySelector('.data-value').innerHTML = `${data.co2}<span class="data-unit">ppm</span>`;
+            dataItems[3].querySelector('.data-value').innerHTML = `${data.co}<span class="data-unit">ppm</span>`;
+            dataItems[4].querySelector('.data-value').innerHTML = `${data.pm25}<span class="data-unit">μg/m³</span>`;
+            dataItems[5].querySelector('.data-value').innerHTML = `${data.pm10}<span class="data-unit">μg/m³</span>`;
+            dataItems[6].querySelector('.data-value').innerHTML = `${data.light}<span class="data-unit">lux</span>`;
+            dataItems[7].querySelector('.data-value').innerHTML = `${data.rain}<span class="data-unit">mm</span>`;
+        }
+        
+        // Update sync counters
+        function updateSyncCounters() {
+            minuteSyncCountEl.textContent = minuteSyncCount;
+            secondSyncCountEl.textContent = secondSyncCount;
+        }
+        
+        // Fetch data from Blynk API
+        async function fetchBlynkData() {
+            const blynkToken = document.getElementById('blynkToken').value;
+            const url = `https://blynk.cloud/external/api/get?token=${blynkToken}&v1`;
+            
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                return data;
+            } catch (error) {
+                addLog(`Error fetching data from Blynk: ${error.message}`, 'error', 'Blynk API');
+                return null;
+            }
+        }
+        
+        // Insert data into Supabase
+        async function insertDataToSupabase(data) {
+            const tableName = document.getElementById('tableName').value;
+            
+            try {
+                const { data: result, error } = await supabase
+                    .from(tableName)
+                    .insert([
+                        {
+                            temperature: data.temperature,
+                            humidity: data.humidity,
+                            co2: data.co2,
+                            co: data.co,
+                            pm25: data.pm25,
+                            pm10: data.pm10,
+                            light: data.light,
+                            rain: data.rain
+                        }
+                    ])
+                    .select();
+                
+                if (error) {
+                    throw error;
+                }
+                
+                return result;
+            } catch (error) {
+                addLog(`Error inserting data to Supabase: ${error.message}`, 'error', 'Supabase');
+                return null;
+            }
+        }
+        
+        // Perform a single sync operation (minute interval)
+        async function performSync1() {
+            if (isSyncing1) return;
+            
+            isSyncing1 = true;
+            
+            // Fetch data from Blynk
+            const blynkData = await fetchBlynkData();
+            if (!blynkData) {
+                isSyncing1 = false;
+                return;
+            }
+            
+            // Update the data display
+            updateDataDisplay(blynkData);
+            
+            // Insert data into Supabase
+            const result = await insertDataToSupabase(blynkData);
+            if (result) {
+                minuteSyncCount++;
+                updateSyncCounters();
+                addLog('Data successfully synced to Supabase', 'success', 'Minute Sync');
+            }
+            
+            isSyncing1 = false;
+        }
+        
+        // Perform a single sync operation (second interval)
+        async function performSync2() {
+            if (isSyncing2) return;
+            
+            isSyncing2 = true;
+            
+            // Fetch data from Blynk
+            const blynkData = await fetchBlynkData();
+            if (!blynkData) {
+                isSyncing2 = false;
+                return;
+            }
+            
+            // Update the data display
+            updateDataDisplay(blynkData);
+            
+            // Insert data into Supabase
+            const result = await insertDataToSupabase(blynkData);
+            if (result) {
+                secondSyncCount++;
+                updateSyncCounters();
+                addLog('Data successfully synced to Supabase', 'secondary', 'Second Sync');
+            }
+            
+            isSyncing2 = false;
+        }
+        
+        // Start minute automatic syncing
+        function startAutoSync1() {
+            if (syncInterval1) {
+                clearInterval(syncInterval1);
+            }
+            
+            const intervalMinutes = parseInt(syncIntervalInput1.value) || 5;
+            const intervalMs = intervalMinutes * 60 * 1000;
+            
+            // Perform initial sync
+            performSync1();
+            
+            // Set up interval for subsequent syncs
+            syncInterval1 = setInterval(performSync1, intervalMs);
+            
+            statusBadge1.textContent = 'MINUTE: ACTIVE';
+            statusBadge1.className = 'status-badge status-active';
+            addLog(`Minute auto sync started (every ${intervalMinutes} minutes)`, 'info', 'Minute Sync');
+        }
+        
+        // Stop minute automatic syncing
+        function stopAutoSync1() {
+            if (syncInterval1) {
+                clearInterval(syncInterval1);
+                syncInterval1 = null;
+            }
+            
+            statusBadge1.textContent = 'MINUTE: INACTIVE';
+            statusBadge1.className = 'status-badge status-inactive';
+            addLog('Minute auto sync stopped', 'info', 'Minute Sync');
+        }
+        
+        // Start second automatic syncing
+        function startAutoSync2() {
+            if (syncInterval2) {
+                clearInterval(syncInterval2);
+            }
+            
+            const intervalSeconds = parseInt(syncIntervalInput2.value) || 30;
+            const intervalMs = intervalSeconds * 1000;
+            
+            // Perform initial sync
+            performSync2();
+            
+            // Set up interval for subsequent syncs
+            syncInterval2 = setInterval(performSync2, intervalMs);
+            
+            statusBadge2.textContent = 'SECOND: ACTIVE';
+            statusBadge2.className = 'status-badge status-active';
+            addLog(`Second auto sync started (every ${intervalSeconds} seconds)`, 'info', 'Second Sync');
+        }
+        
+        // Stop second automatic syncing
+        function stopAutoSync2() {
+            if (syncInterval2) {
+                clearInterval(syncInterval2);
+                syncInterval2 = null;
+            }
+            
+            statusBadge2.textContent = 'SECOND: INACTIVE';
+            statusBadge2.className = 'status-badge status-inactive';
+            addLog('Second auto sync stopped', 'info', 'Second Sync');
+        }
+        
+        // Start all intervals
+        function startAllIntervals() {
+            startAutoSync1();
+            startAutoSync2();
+        }
+        
+        // Stop all intervals
+        function stopAllIntervals() {
+            stopAutoSync1();
+            stopAutoSync2();
+        }
+        
+        // Manual sync (performs both operations)
+        async function performManualSync() {
+            addLog('Manual sync initiated', 'info', 'Manual Sync');
+            await performSync1();
+            await performSync2();
+            addLog('Manual sync completed', 'success', 'Manual Sync');
+        }
+        
+        // Event listeners
+        startSyncBtn1.addEventListener('click', startAutoSync1);
+        stopSyncBtn1.addEventListener('click', stopAutoSync1);
+        startSyncBtn2.addEventListener('click', startAutoSync2);
+        stopSyncBtn2.addEventListener('click', stopAutoSync2);
+        manualSyncBtn.addEventListener('click', performManualSync);
+        startAllBtn.addEventListener('click', startAllIntervals);
+        stopAllBtn.addEventListener('click', stopAllIntervals);
+        
+        // Initialize
+        addLog('System initialized. Ready to sync data.', 'info', 'System');
+        updateSyncCounters();
+    </script>
+</body>
+</html>
