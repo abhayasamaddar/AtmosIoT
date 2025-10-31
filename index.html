@@ -1,0 +1,3350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AtmosIoT - Environmental Monitoring Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Leaflet CSS for maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        :root {
+            --primary: #1a237e;
+            --secondary: #283593;
+            --accent: #5c6bc0;
+            --success: #4caf50;
+            --warning: #ff9800;
+            --danger: #f44336;
+            --light: #f5f7fa;
+            --dark: #121858;
+            --gray: #9e9e9e;
+            --text: #333333;
+            --card-bg: #ffffff;
+            --header-bg: linear-gradient(135deg, #1a237e 0%, #283593 100%);
+            --body-bg: linear-gradient(135deg, #f5f7fa 0%, #e4e8f5 100%);
+            --day-sky: linear-gradient(135deg, #87CEEB 0%, #B0E2FF 100%);
+            --night-sky: linear-gradient(135deg, #0f1a30 0%, #1c2e4a 100%);
+            --day-card: #ffffff;
+            --night-card: #2d3748;
+            --day-text: #333333;
+            --night-text: #e2e8f0;
+            --day-header: linear-gradient(135deg, #1a237e 0%, #283593 100%);
+            --night-header: linear-gradient(135deg, #0f1a30 0%, #1c2e4a 100%);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: var(--body-bg);
+            color: var(--text);
+            line-height: 1.6;
+            min-height: 100vh;
+            transition: all 1.5s ease;
+        }
+        
+        .sky-background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            transition: all 1.5s ease;
+        }
+        
+        .stars {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -2;
+            opacity: 0;
+            transition: opacity 2s ease;
+        }
+        
+        .star {
+            position: absolute;
+            background-color: white;
+            border-radius: 50%;
+            animation: twinkle 4s infinite;
+        }
+        
+        @keyframes twinkle {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
+        
+        /* Alert System Styles */
+        .alert-container {
+            position: fixed;
+            top: 100px;
+            right: 20px;
+            width: 350px;
+            z-index: 1000;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .alert {
+            background: white;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+            border-left: 5px solid var(--warning);
+            animation: slideInRight 0.5s ease;
+            transition: all 0.3s ease;
+        }
+
+        .alert.danger {
+            border-left-color: var(--danger);
+            background: linear-gradient(135deg, #fff5f5 0%, #fed7d7 100%);
+        }
+
+        .alert.warning {
+            border-left-color: var(--warning);
+            background: linear-gradient(135deg, #fffaf0 0%, #feebc8 100%);
+        }
+
+        .alert.info {
+            border-left-color: var(--accent);
+            background: linear-gradient(135deg, #f0f4ff 0%, #c3dafe 100%);
+        }
+
+        .alert-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .alert-title {
+            font-weight: 700;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--dark);
+        }
+
+        .alert-close {
+            background: none;
+            border: none;
+            font-size: 1.2rem;
+            cursor: pointer;
+            color: var(--gray);
+            padding: 5px;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .alert-close:hover {
+            background: rgba(0, 0, 0, 0.1);
+        }
+
+        .alert-message {
+            font-size: 0.95rem;
+            line-height: 1.4;
+            color: var(--text);
+        }
+
+        .alert-parameter {
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        .alert-value {
+            font-weight: 700;
+        }
+
+        .alert-threshold {
+            font-size: 0.85rem;
+            color: var(--gray);
+            margin-top: 5px;
+        }
+
+        .alert-badge {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: var(--danger);
+            color: white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+
+        .alert-icon {
+            font-size: 1.2rem;
+        }
+
+        @keyframes slideInRight {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes pulseAlert {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .alert.pulse {
+            animation: pulseAlert 2s infinite;
+        }
+
+        /* Night mode styles for alerts */
+        body.night-mode .alert {
+            background: #2d3748;
+            color: var(--night-text);
+        }
+
+        body.night-mode .alert-title {
+            color: var(--night-text);
+        }
+
+        body.night-mode .alert-message {
+            color: #e2e8f0;
+        }
+
+        body.night-mode .alert.danger {
+            background: linear-gradient(135deg, #2d1a1a 0%, #422727 100%);
+        }
+
+        body.night-mode .alert.warning {
+            background: linear-gradient(135deg, #2d261a 0%, #423727 100%);
+        }
+
+        body.night-mode .alert.info {
+            background: linear-gradient(135deg, #1a1f2d 0%, #272f42 100%);
+        }
+        
+        /* Rain Animation Styles */
+        .rain-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            opacity: 0;
+            transition: opacity 1.5s ease;
+            pointer-events: none;
+        }
+        
+        .rain-drop {
+            position: absolute;
+            width: 2px;
+            height: 15px;
+            background: linear-gradient(to bottom, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.2));
+            border-radius: 0 0 5px 5px;
+            animation: rain-fall linear infinite;
+        }
+        
+        @keyframes rain-fall {
+            0% {
+                transform: translateY(-20px);
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(100vh);
+                opacity: 0;
+            }
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        
+        /* Header Styles */
+        header {
+            background: var(--header-bg);
+            color: white;
+            padding: 15px 0;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            transition: all 1.5s ease;
+        }
+        
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo {
+            font-size: 1.8rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+        }
+        
+        .logo img {
+            margin-right: 10px;
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+        }
+        
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        
+        .datetime {
+            font-size: 1.1rem;
+            font-weight: 500;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 8px 15px;
+            border-radius: 20px;
+        }
+        
+        .theme-toggle {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            transition: background 0.3s;
+        }
+        
+        .theme-toggle:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        
+        .user-menu {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            padding: 8px 15px;
+            border-radius: 20px;
+            transition: background 0.3s;
+        }
+        
+        .user-menu:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .user-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: var(--accent);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+        
+        /* Dashboard Grid */
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 25px;
+            margin: 30px 0;
+        }
+        
+        @media (max-width: 1200px) {
+            .dashboard {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.05);
+            padding: 25px;
+            transition: all 1.5s ease;
+            border: 1px solid rgba(0, 0, 0, 0.03);
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 20px rgba(0, 0, 0, 0.08);
+        }
+        
+        .card-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            color: var(--primary);
+            transition: all 1.5s ease;
+        }
+        
+        .card-title i {
+            margin-right: 10px;
+            color: var(--accent);
+            font-size: 1.4rem;
+        }
+        
+        /* Air Quality Card */
+        .air-quality-card {
+            grid-column: span 4;
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+        }
+        
+        @media (max-width: 992px) {
+            .metrics-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        
+        @media (max-width: 576px) {
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .metric {
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            color: white;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s;
+        }
+        
+        .metric:hover {
+            transform: scale(1.03);
+        }
+        
+        .metric::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.5);
+        }
+        
+        .metric.good { 
+            background: linear-gradient(135deg, var(--success) 0%, #66bb6a 100%);
+        }
+        
+        .metric.moderate { 
+            background: linear-gradient(135deg, var(--warning) 0%, #ffb74d 100%);
+        }
+        
+        .metric.poor { 
+            background: linear-gradient(135deg, var(--danger) 0%, #ef5350 100%);
+        }
+        
+        .metric-name {
+            font-size: 1rem;
+            margin-bottom: 8px;
+            opacity: 0.9;
+        }
+        
+        .metric-value {
+            font-size: 2.2rem;
+            font-weight: 700;
+            margin: 12px 0;
+        }
+        
+        .metric-unit {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+        
+        .metric-trend {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            font-size: 1.2rem;
+        }
+        
+        /* Temperature and Humidity Cards */
+        .temp-humidity {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            height: 100%;
+        }
+        
+        .temp-value {
+            font-size: 3.5rem;
+            font-weight: 700;
+            margin: 15px 0;
+            display: flex;
+            align-items: flex-start;
+            color: var(--primary);
+            transition: all 1.5s ease;
+        }
+        
+        .temp-unit {
+            font-size: 1.8rem;
+            margin-top: 8px;
+        }
+        
+        .temp-feels-like {
+            font-size: 1rem;
+            color: var(--gray);
+            margin-bottom: 15px;
+            transition: all 1.5s ease;
+        }
+        
+        .temp-toggle {
+            display: flex;
+            background: var(--light);
+            border-radius: 20px;
+            padding: 5px;
+            margin-top: 15px;
+        }
+        
+        .temp-toggle button {
+            border: none;
+            padding: 8px 20px;
+            border-radius: 15px;
+            background: transparent;
+            cursor: pointer;
+            transition: background 0.3s;
+            font-weight: 500;
+        }
+        
+        .temp-toggle button.active {
+            background: white;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            color: var(--primary);
+        }
+        
+        .humidity-value {
+            font-size: 3.5rem;
+            font-weight: 700;
+            margin: 15px 0;
+            color: var(--primary);
+            transition: all 1.5s ease;
+        }
+        
+        .humidity-icon {
+            width: 120px;
+            height: 120px;
+            margin: 20px auto;
+            position: relative;
+        }
+        
+        .humidity-fill {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: linear-gradient(to top, var(--accent) 0%, #8c9eff 100%);
+            border-radius: 0 0 60px 60px;
+            transition: height 1s ease;
+        }
+        
+        .humidity-droplet {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 3rem;
+            color: var(--accent);
+        }
+        
+        /* Light Intensity Card */
+        .light-intensity {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            height: 100%;
+        }
+        
+        .light-value {
+            font-size: 3.5rem;
+            font-weight: 700;
+            margin: 15px 0;
+            color: var(--primary);
+            transition: all 1.5s ease;
+        }
+        
+        .light-icon {
+            width: 120px;
+            height: 120px;
+            margin: 20px auto;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .light-sun {
+            font-size: 5rem;
+            color: #ffc107;
+            transition: all 1.5s ease;
+        }
+        
+        .light-sun.night {
+            color: #e0e0e0;
+        }
+        
+        .light-sun.cloudy {
+            color: #bdbdbd;
+        }
+        
+        .light-status {
+            font-size: 1.1rem;
+            margin-top: 10px;
+            font-weight: 500;
+            color: var(--gray);
+            transition: all 1.5s ease;
+        }
+        
+        /* Charts Section */
+        .charts {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 25px;
+            margin: 30px 0;
+        }
+        
+        @media (max-width: 992px) {
+            .charts {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .chart-container {
+            background: var(--card-bg);
+            border-radius: 16px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.05);
+            padding: 25px;
+            border: 1px solid rgba(0, 0, 0, 0.03);
+            transition: all 1.5s ease;
+        }
+        
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+            flex-wrap: wrap;
+        }
+        
+        .chart-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: var(--primary);
+            transition: all 1.5s ease;
+        }
+        
+        .chart-controls {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .chart-controls select, .chart-controls button {
+            padding: 8px 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+        
+        .chart-controls select:focus, .chart-controls button:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        
+        .chart-controls button.active {
+            background: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
+        
+        .chart-wrapper {
+            position: relative;
+            height: 300px;
+        }
+        
+        /* Regional Comparison */
+        .region-list {
+            margin-top: 20px;
+        }
+        
+        .region-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 18px;
+            margin-bottom: 12px;
+            background: var(--light);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border-left: 4px solid transparent;
+        }
+        
+        .region-item:hover {
+            background: #e8eaf6;
+            transform: translateX(5px);
+        }
+        
+        .region-item.active {
+            background: var(--accent);
+            color: white;
+            border-left-color: var(--primary);
+        }
+        
+        .region-aqi {
+            font-weight: 600;
+            padding: 5px 12px;
+            border-radius: 15px;
+            background: white;
+            color: var(--dark);
+            font-size: 0.9rem;
+        }
+        
+        .region-item.active .region-aqi {
+            background: var(--primary);
+            color: white;
+        }
+        
+        /* Status Bar */
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            margin: 20px 0;
+            padding: 15px 25px;
+            background: var(--card-bg);
+            border-radius: 16px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            transition: all 1.5s ease;
+        }
+        
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        
+        .status-indicator.good {
+            background: var(--success);
+        }
+        
+        .status-indicator.moderate {
+            background: var(--warning);
+        }
+        
+        .status-indicator.poor {
+            background: var(--danger);
+        }
+        
+        /* Future Trends Section */
+        .future-trends-container {
+            margin-top: 30px;
+        }
+        
+        .prediction-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding: 15px;
+            background: var(--light);
+            border-radius: 10px;
+        }
+        
+        .prediction-model {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .model-badge {
+            background: var(--accent);
+            color: white;
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+        
+        .confidence-level {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .confidence-bar {
+            width: 120px;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        
+        .confidence-fill {
+            height: 100%;
+            background: var(--success);
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+        
+        /* Map Section Styles */
+        .map-section {
+            margin: 40px 0;
+        }
+        
+        .map-container {
+            background: var(--card-bg);
+            border-radius: 16px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.05);
+            padding: 25px;
+            border: 1px solid rgba(0, 0, 0, 0.03);
+            transition: all 1.5s ease;
+        }
+        
+        .map-wrapper {
+            position: relative;
+            height: 500px;
+            border-radius: 12px;
+            overflow: hidden;
+            margin-top: 20px;
+        }
+        
+        #sensorMap {
+            width: 100%;
+            height: 100%;
+            border-radius: 12px;
+        }
+        
+        .map-legend {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+        }
+        
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+        }
+        
+        .sensor-coverage {
+            background: rgba(92, 107, 192, 0.3);
+            border: 2px solid #5c6bc0;
+        }
+        
+        .sensor-location {
+            background: #f44336;
+        }
+        
+        .map-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        
+        .map-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--primary);
+            transition: all 1.5s ease;
+        }
+        
+        .map-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .map-btn {
+            padding: 8px 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .map-btn:hover {
+            background: #f5f5f5;
+        }
+        
+        .map-btn.active {
+            background: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
+        
+        /* Top Stories Section */
+        .top-stories-section {
+            margin: 40px 0;
+        }
+        
+        .news-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .news-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .refresh-btn {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .refresh-btn:hover {
+            background: var(--primary);
+            transform: translateY(-2px);
+        }
+        
+        .refresh-btn:active {
+            transform: translateY(0);
+        }
+        
+        .refresh-btn:disabled {
+            background: var(--gray);
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .refresh-btn .spinner {
+            animation: spin 1s linear infinite;
+        }
+        
+        .stories-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 25px;
+            margin-top: 20px;
+        }
+        
+        .story-card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.05);
+            padding: 20px;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(0, 0, 0, 0.03);
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        
+        .story-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 20px rgba(0, 0, 0, 0.08);
+        }
+        
+        .story-image {
+            width: 100%;
+            height: 180px;
+            border-radius: 12px;
+            object-fit: cover;
+            margin-bottom: 15px;
+        }
+        
+        .story-source {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+            font-size: 0.9rem;
+            color: var(--gray);
+        }
+        
+        .source-logo {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+        
+        .story-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+            line-height: 1.4;
+            color: var(--primary);
+            flex-grow: 1;
+        }
+        
+        .story-description {
+            font-size: 0.95rem;
+            color: var(--gray);
+            margin-bottom: 15px;
+            line-height: 1.5;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        
+        .story-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: auto;
+            font-size: 0.85rem;
+            color: var(--gray);
+        }
+        
+        .read-more {
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+        
+        .read-more:hover {
+            color: var(--primary);
+        }
+        
+        .news-loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 200px;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .news-spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        /* About and Contact Sections */
+        .about-contact-section {
+            margin: 50px 0 30px;
+        }
+        
+        .about-contact-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 30px;
+        }
+        
+        @media (max-width: 768px) {
+            .about-contact-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .about-card, .contact-card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.05);
+            padding: 30px;
+            border: 1px solid rgba(0, 0, 0, 0.03);
+        }
+        
+        .about-card h2, .contact-card h2 {
+            color: var(--primary);
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+        }
+        
+        .about-content p {
+            margin-bottom: 15px;
+            line-height: 1.6;
+        }
+        
+        .mission-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-top: 25px;
+        }
+        
+        .mission-stat {
+            text-align: center;
+            padding: 15px;
+            background: var(--light);
+            border-radius: 10px;
+        }
+        
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            font-size: 0.9rem;
+            color: var(--gray);
+        }
+        
+        .contact-info {
+            margin-bottom: 25px;
+        }
+        
+        .contact-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 15px;
+            padding: 10px 0;
+        }
+        
+        .contact-icon {
+            width: 40px;
+            height: 40px;
+            background: var(--accent);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+        
+        .contact-details h4 {
+            margin-bottom: 5px;
+            color: var(--primary);
+        }
+        
+        .contact-details p {
+            color: var(--gray);
+            font-size: 0.95rem;
+        }
+        
+        .social-links {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .social-link {
+            width: 40px;
+            height: 40px;
+            background: var(--light);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--primary);
+            text-decoration: none;
+            transition: all 0.3s;
+        }
+        
+        .social-link:hover {
+            background: var(--accent);
+            color: white;
+            transform: translateY(-3px);
+        }
+        
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 25px 0;
+            margin-top: 40px;
+            color: var(--gray);
+            border-top: 1px solid #e0e0e0;
+            background: var(--card-bg);
+            transition: all 1.5s ease;
+        }
+        
+        /* Responsive Adjustments */
+        @media (max-width: 768px) {
+            .air-quality-card {
+                grid-column: span 1;
+            }
+            
+            .header-content {
+                flex-direction: column;
+                gap: 15px;
+            }
+            
+            .datetime {
+                font-size: 1rem;
+            }
+            
+            .status-bar {
+                flex-direction: column;
+                gap: 15px;
+            }
+            
+            .prediction-info {
+                flex-direction: column;
+                gap: 15px;
+                align-items: flex-start;
+            }
+            
+            .mission-stats {
+                grid-template-columns: 1fr;
+            }
+            
+            .map-controls {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .map-actions {
+                width: 100%;
+                justify-content: space-between;
+            }
+            
+            .news-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
+            }
+            
+            .alert-container {
+                width: 90%;
+                right: 5%;
+                top: 80px;
+            }
+        }
+        
+        /* Animation for metrics */
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .metric-update {
+            animation: pulse 0.5s ease;
+        }
+        
+        /* Night mode styles */
+        body.night-mode {
+            --body-bg: var(--night-sky);
+            --card-bg: var(--night-card);
+            --text: var(--night-text);
+            --header-bg: var(--night-header);
+            --light: #4a5568;
+        }
+        
+        body.night-mode .card-title,
+        body.night-mode .temp-value,
+        body.night-mode .humidity-value,
+        body.night-mode .light-value,
+        body.night-mode .chart-title,
+        body.night-mode .story-title {
+            color: var(--night-text);
+        }
+        
+        body.night-mode .temp-feels-like,
+        body.night-mode .light-status {
+            color: #a0aec0;
+        }
+        
+        body.night-mode .chart-controls select, 
+        body.night-mode .chart-controls button {
+            background: #4a5568;
+            color: var(--night-text);
+            border-color: #718096;
+        }
+        
+        body.night-mode .chart-controls button.active {
+            background: var(--accent);
+            color: white;
+        }
+        
+        body.night-mode .region-item {
+            background: #4a5568;
+            color: var(--night-text);
+        }
+        
+        body.night-mode .region-item:hover {
+            background: #5a6578;
+        }
+        
+        body.night-mode .temp-toggle {
+            background: #4a5568;
+        }
+        
+        body.night-mode .temp-toggle button.active {
+            background: #718096;
+            color: var(--night-text);
+        }
+        
+        body.night-mode .prediction-info {
+            background: #4a5568;
+        }
+        
+        body.night-mode .confidence-bar {
+            background: #718096;
+        }
+        
+        body.night-mode .story-description,
+        body.night-mode .story-source,
+        body.night-mode .story-meta {
+            color: #a0aec0;
+        }
+        
+        body.night-mode .mission-stat {
+            background: #4a5568;
+        }
+        
+        body.night-mode .map-btn {
+            background: #4a5568;
+            color: var(--night-text);
+            border-color: #718096;
+        }
+        
+        body.night-mode .map-btn.active {
+            background: var(--accent);
+            color: white;
+        }
+        
+        body.night-mode .map-btn:hover {
+            background: #5a6578;
+        }
+        
+        body.night-mode .refresh-btn {
+            background: #4a5568;
+            color: var(--night-text);
+        }
+        
+        body.night-mode .refresh-btn:hover {
+            background: var(--accent);
+        }
+    </style>
+</head>
+<body>
+    <!-- Alert Container -->
+    <div class="alert-container" id="alertContainer"></div>
+
+    <!-- Rain Animation Container -->
+    <div class="rain-container" id="rainContainer"></div>
+
+    <div class="sky-background"></div>
+    <div class="stars" id="stars"></div>
+
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <img src="https://i.postimg.cc/QNYxLb3C/Untitled-design-5.png" alt="AtmosIoT Logo">
+                    AtmosIoT
+                </div>
+                <div class="header-actions">
+                    <div class="datetime" id="datetime">Loading...</div>
+                    <button class="theme-toggle" id="themeToggle">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                    <div class="user-menu">
+                        <div class="user-avatar">A</div>
+                        <span>About</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="status-bar">
+            <div class="status-item">
+                <div class="status-indicator good"></div>
+                <span>Good Air Quality</span>
+            </div>
+            <div class="status-item">
+                <div class="status-indicator moderate"></div>
+                <span>Moderate Air Quality</span>
+            </div>
+            <div class="status-item">
+                <div class="status-indicator poor"></div>
+                <span>Poor Air Quality</span>
+            </div>
+            <div class="status-item">
+                <i class="fas fa-sync-alt"></i>
+                <span>Last updated: <span id="lastUpdate">Just now</span></span>
+            </div>
+        </div>
+
+        <div class="dashboard">
+            <div class="card air-quality-card">
+                <div class="card-title">
+                    <i class="fas fa-wind"></i> Air Quality Index
+                </div>
+                <div class="metrics-grid" id="airQualityMetrics">
+                    <!-- Metrics will be populated by JavaScript -->
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">
+                    <i class="fas fa-thermometer-half"></i> Temperature
+                </div>
+                <div class="temp-humidity">
+                    <div class="temp-value" id="temperatureValue">--</div>
+                    <div class="temp-feels-like" id="feelsLike">Feels like: --</div>
+                    <div class="weather-icon" id="weatherIcon"><i class="fas fa-sun"></i></div>
+                    <div class="temp-toggle">
+                        <button id="celsiusBtn" class="active">°C</button>
+                        <button id="fahrenheitBtn">°F</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">
+                    <i class="fas fa-tint"></i> Humidity
+                </div>
+                <div class="temp-humidity">
+                    <div class="humidity-value" id="humidityValue">--%</div>
+                    <div class="humidity-icon">
+                        <div class="humidity-droplet"><i class="fas fa-tint"></i></div>
+                        <div class="humidity-fill" id="humidityFill"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- New Light Intensity Card -->
+            <div class="card">
+                <div class="card-title">
+                    <i class="fas fa-sun"></i> Light Intensity
+                </div>
+                <div class="light-intensity">
+                    <div class="light-value" id="lightValue">--%</div>
+                    <div class="light-icon">
+                        <i class="fas fa-sun light-sun" id="lightIcon"></i>
+                    </div>
+                    <div class="light-status" id="lightStatus">Loading...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- New Map Section -->
+        <div class="map-section">
+            <div class="card">
+                <div class="card-title">
+                    <i class="fas fa-map-marked-alt"></i> Sensor Coverage Map
+                </div>
+                <div class="map-controls">
+                    <div class="map-title">BPUT Campus Sensor Network</div>
+                    <div class="map-actions">
+                        <button class="map-btn" id="zoomToSensor">
+                            <i class="fas fa-crosshairs"></i> Zoom to Sensor
+                        </button>
+                        <button class="map-btn" id="toggleCoverage">
+                            <i class="fas fa-bullseye"></i> Toggle Coverage
+                        </button>
+                    </div>
+                </div>
+                <div class="map-wrapper">
+                    <div id="sensorMap"></div>
+                </div>
+                <div class="map-legend">
+                    <div class="legend-item">
+                        <div class="legend-color sensor-location"></div>
+                        <span>Sensor Location</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color sensor-coverage"></div>
+                        <span>20m Coverage Area</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="charts">
+            <div class="chart-container">
+                <div class="chart-header">
+                    <div class="chart-title">Historical Trends</div>
+                    <div class="chart-controls">
+                        <select id="parameterSelect">
+                            <option value="pm25">PM2.5</option>
+                            <option value="pm10">PM1.0</option>
+                            <option value="co2">CO2</option>
+                            <option value="co">CO</option>
+                            <option value="temperature">Temperature</option>
+                            <option value="humidity">Humidity</option>
+                            <option value="light">Light Intensity</option>
+                        </select>
+                        <div>
+                            <button id="dayBtn" class="time-range-btn active">24H</button>
+                            <button id="weekBtn" class="time-range-btn">7D</button>
+                            <button id="monthBtn" class="time-range-btn">1M</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="historicalChart"></canvas>
+                </div>
+                
+                <!-- Future Trends Section -->
+                <div class="future-trends-container">
+                    <div class="chart-header">
+                        <div class="chart-title">
+                            <i class="fas fa-chart-line"></i> Future Trends (ML Predictions)
+                        </div>
+                        <div class="chart-controls">
+                            <select id="predictionParameterSelect">
+                                <option value="pm25">PM2.5</option>
+                                <option value="pm10">PM1.0</option>
+                                <option value="co2">CO2</option>
+                                <option value="temperature">Temperature</option>
+                                <option value="humidity">Humidity</option>
+                                <option value="light">Light Intensity</option>
+                            </select>
+                            <div>
+                                <button id="prediction24hBtn" class="prediction-range-btn active">24H</button>
+                                <button id="prediction7dBtn" class="prediction-range-btn">7D</button>
+                                <button id="prediction30dBtn" class="prediction-range-btn">30D</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="prediction-info">
+                        <div class="prediction-model">
+                            <span>Model:</span>
+                            <div class="model-badge">LSTM Neural Network</div>
+                        </div>
+                        <div class="confidence-level">
+                            <span>Confidence:</span>
+                            <div class="confidence-bar">
+                                <div class="confidence-fill" id="confidenceFill" style="width: 87%"></div>
+                            </div>
+                            <span id="confidenceValue">87%</span>
+                        </div>
+                    </div>
+                    
+                    <div class="chart-wrapper">
+                        <canvas id="futureTrendsChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-header">
+                    <div class="chart-title">Regional Comparison</div>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="regionalChart"></canvas>
+                </div>
+                <div class="region-list" id="regionList">
+                    <!-- Regions will be populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Top Stories Section -->
+        <div class="top-stories-section">
+            <div class="card">
+                <div class="news-header">
+                    <div class="card-title">
+                        <i class="fas fa-newspaper"></i> Top Environmental Stories
+                    </div>
+                    <div class="news-actions">
+                        <button class="refresh-btn" id="refreshNewsBtn">
+                            <i class="fas fa-sync-alt"></i> Refresh News
+                        </button>
+                    </div>
+                </div>
+                <div id="newsContainer">
+                    <div class="news-loading">
+                        <div class="news-spinner"></div>
+                        <p>Loading latest environmental news...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- About and Contact Section -->
+        <div class="about-contact-section">
+            <div class="about-contact-grid">
+                <div class="about-card">
+                    <h2><i class="fas fa-info-circle"></i> About AtmosIoT</h2>
+                    <div class="about-content">
+                        <p>AtmosIoT is a cutting-edge environmental monitoring platform that leverages IoT sensors and advanced analytics to provide real-time air quality data and predictive insights.</p>
+                        <p>Our mission is to create healthier environments by making air quality data accessible, understandable, and actionable for communities, businesses, and governments worldwide.</p>
+                        
+                        <div class="mission-stats">
+                            <div class="mission-stat">
+                                <div class="stat-value">1</div>
+                                <div class="stat-label">Sensors Deployed</div>
+                            </div>
+                            <div class="mission-stat">
+                                <div class="stat-value">24/7</div>
+                                <div class="stat-label">Real-time Monitoring</div>
+                            </div>
+                            <div class="mission-stat">
+                                <div class="stat-value">95%</div>
+                                <div class="stat-label">Prediction Accuracy</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="contact-card">
+                    <h2><i class="fas fa-envelope"></i> Contact Us</h2>
+                    <div class="contact-info">
+                        <div class="contact-item">
+                            <div class="contact-icon">
+                                <i class="fas fa-map-marker-alt"></i>
+                            </div>
+                            <div class="contact-details">
+                                <h4>Our Location</h4>
+                                <p>BPUT, Rourkela<br>Odisha-769015</p>
+                            </div>
+                        </div>
+                        
+                        <div class="contact-item">
+                            <div class="contact-icon">
+                                <i class="fas fa-phone"></i>
+                            </div>
+                            <div class="contact-details">
+                                <h4>Phone</h4>
+                                <p>+918455017315</p>
+                            </div>
+                        </div>
+                        
+                        <div class="contact-item">
+                            <div class="contact-icon">
+                                <i class="fas fa-envelope"></i>
+                            </div>
+                            <div class="contact-details">
+                                <h4>Email</h4>
+                                <p>biswajeetlenka83@gmail.com</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="social-links">
+                        <a href="#" class="social-link">
+                            <i class="fab fa-twitter"></i>
+                        </a>
+                        <a href="#" class="social-link">
+                            <i class="fab fa-linkedin"></i>
+                        </a>
+                        <a href="#" class="social-link">
+                            <i class="fab fa-github"></i>
+                        </a>
+                        <a href="#" class="social-link">
+                            <i class="fab fa-youtube"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <div class="container">
+            <p>AtmosIoT Environmental Monitoring Dashboard | Real-time Air Quality Data</p>
+            <p><i class="fas fa-shield-alt"></i> Data secured with end-to-end encryption</p>
+        </div>
+    </footer>
+
+    <!-- Leaflet JS for maps -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Supabase configuration - USING YOUR NEW CREDENTIALS
+        const supabaseUrl = 'https://fjfmgndbiespptmsnrff.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZqZm1nbmRiaWVzcHB0bXNucmZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjEyMzk0NzQsImV4cCI6MjA3NjgxNTQ3NH0.FH9L41cIKXH_mVbl7szkb_CDKoyKdw97gOUhDOYJFnQ';
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+
+        // Blynk API Configuration
+        const BLYNK_API_URL = 'https://blynk.cloud/external/api/get?token=aBt1RXmeHshX2N-d3nzOWcqB-HOCUf8S&v1';
+
+        // Telegram Bot Configuration
+        const TELEGRAM_BOT_TOKEN = "8284440230:AAFjGUkg7aa9-UGx7sOi2CUQ8v-tISnvnMQ";
+        const TELEGRAM_CHAT_ID = "6873697666";
+        const TELEGRAM_BOT_URL = "http://t.me/atmosiot_bot";
+
+        // News API Integration
+        const NEWS_API_KEY = '8f8eecc7b561456694afab9f876dd8ad';
+
+        // Sensor location coordinates
+        const SENSOR_LOCATION = [22.248121, 84.818435];
+        const COVERAGE_RADIUS = 20; // 20 meters
+
+        // Map variables
+        let sensorMap;
+        let coverageCircle;
+        let sensorMarker;
+
+        // WHO Alert Thresholds and Safety Limits
+        const ALERT_THRESHOLDS = {
+            pm25: {
+                warning: 25,   // WHO 24-hour mean guideline
+                danger: 50,    // WHO interim target 1
+                unit: 'μg/m³',
+                source: 'WHO'
+            },
+            pm10: {
+                warning: 15,   // Custom threshold for PM1.0
+                danger: 30,    // Custom threshold for PM1.0
+                unit: 'μg/m³',
+                source: 'Custom'
+            },
+            co2: {
+                warning: 1000, // Indoor air quality guideline
+                danger: 2000,  // Level associated with poor cognitive performance
+                unit: 'ppm',
+                source: 'ASHRAE'
+            },
+            co: {
+                warning: 9,    // WHO 8-hour mean
+                danger: 25,    // Immediate health effects level
+                unit: 'ppm',
+                source: 'WHO'
+            },
+            temperature: {
+                warningLow: 10,   // Too cold for comfort
+                warningHigh: 32,  // Too hot for comfort
+                dangerLow: 0,     // Freezing - risk of hypothermia
+                dangerHigh: 40,   // Extreme heat - health risk
+                unit: '°C',
+                source: 'Health'
+            },
+            humidity: {
+                warningLow: 30,   // Dry conditions
+                warningHigh: 70,  // Humid conditions
+                dangerLow: 20,    // Very dry - respiratory issues
+                dangerHigh: 85,   // Very humid - mold risk
+                unit: '%',
+                source: 'Health'
+            },
+            light: {
+                warningLow: 10,   // Very dim light
+                warningHigh: 90,  // Very bright light
+                dangerLow: 5,     // Extremely low visibility
+                dangerHigh: 95,   // Potential eye damage risk
+                unit: '%',
+                source: 'Safety'
+            }
+        };
+
+        // Telegram Alert System
+        const telegramAlertSystem = {
+            sentAlerts: new Set(), // Track sent alerts to avoid duplicates
+            
+            async sendAlert(alert) {
+                // Create a unique identifier for this alert to avoid duplicates
+                const alertKey = `${alert.id}-${Math.floor(alert.value)}`;
+                
+                // Check if we've already sent this alert
+                if (this.sentAlerts.has(alertKey)) {
+                    console.log(`Alert ${alertKey} already sent, skipping`);
+                    return;
+                }
+                
+                // Mark this alert as sent
+                this.sentAlerts.add(alertKey);
+                
+                // Format the message for Telegram
+                const message = this.formatMessage(alert);
+                
+                try {
+                    const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            chat_id: TELEGRAM_CHAT_ID,
+                            text: message,
+                            parse_mode: 'HTML'
+                        })
+                    });
+                    
+                    if (response.ok) {
+                        console.log('Telegram alert sent successfully');
+                    } else {
+                        console.error('Failed to send Telegram alert:', await response.text());
+                        // Remove from sent alerts if failed to send
+                        this.sentAlerts.delete(alertKey);
+                    }
+                } catch (error) {
+                    console.error('Error sending Telegram alert:', error);
+                    // Remove from sent alerts if failed to send
+                    this.sentAlerts.delete(alertKey);
+                }
+            },
+            
+            formatMessage(alert) {
+                const emoji = alert.type === 'danger' ? '🚨' : '⚠️';
+                const status = alert.type === 'danger' ? 'CRITICAL' : 'WARNING';
+                
+                return `
+${emoji} <b>${status} ALERT - ${alert.parameter}</b> ${emoji}
+
+📊 <b>Current Value:</b> ${alert.value} ${alert.unit}
+📈 <b>Threshold:</b> ${alert.threshold} ${alert.unit}
+📝 <b>Source:</b> ${alert.source}
+
+📍 <b>Location:</b> BPUT Campus Sensor
+🕒 <b>Time:</b> ${new Date().toLocaleString()}
+
+${alert.message}
+
+<i>Monitor live data: ${TELEGRAM_BOT_URL}</i>
+                `.trim();
+            },
+            
+            // Clear old alerts from memory (to allow resending after some time)
+            cleanupOldAlerts() {
+                // Keep only alerts from the last 24 hours
+                // This is a simplified approach - in a real app you might want more sophisticated logic
+                if (this.sentAlerts.size > 100) {
+                    this.sentAlerts.clear();
+                }
+            }
+        };
+
+        // Alert management system
+        const alertSystem = {
+            activeAlerts: new Map(),
+            
+            checkAlerts(metrics) {
+                const alerts = [];
+                
+                // Check PM2.5
+                if (metrics.pm25 >= ALERT_THRESHOLDS.pm25.danger) {
+                    alerts.push({
+                        id: 'pm25-danger',
+                        type: 'danger',
+                        title: 'PM2.5 Critical Alert',
+                        message: `PM2.5 levels are dangerously high at ${metrics.pm25} ${ALERT_THRESHOLDS.pm25.unit}`,
+                        parameter: 'PM2.5',
+                        value: metrics.pm25,
+                        threshold: ALERT_THRESHOLDS.pm25.danger,
+                        unit: ALERT_THRESHOLDS.pm25.unit,
+                        source: ALERT_THRESHOLDS.pm25.source,
+                        icon: 'fas fa-skull-crossbones'
+                    });
+                } else if (metrics.pm25 >= ALERT_THRESHOLDS.pm25.warning) {
+                    alerts.push({
+                        id: 'pm25-warning',
+                        type: 'warning',
+                        title: 'PM2.5 Warning',
+                        message: `PM2.5 levels are elevated at ${metrics.pm25} ${ALERT_THRESHOLDS.pm25.unit}`,
+                        parameter: 'PM2.5',
+                        value: metrics.pm25,
+                        threshold: ALERT_THRESHOLDS.pm25.warning,
+                        unit: ALERT_THRESHOLDS.pm25.unit,
+                        source: ALERT_THRESHOLDS.pm25.source,
+                        icon: 'fas fa-exclamation-triangle'
+                    });
+                }
+                
+                // Check PM1.0
+                if (metrics.pm10 >= ALERT_THRESHOLDS.pm10.danger) {
+                    alerts.push({
+                        id: 'pm10-danger',
+                        type: 'danger',
+                        title: 'PM1.0 Critical Alert',
+                        message: `PM1.0 levels are dangerously high at ${metrics.pm10} ${ALERT_THRESHOLDS.pm10.unit}`,
+                        parameter: 'PM1.0',
+                        value: metrics.pm10,
+                        threshold: ALERT_THRESHOLDS.pm10.danger,
+                        unit: ALERT_THRESHOLDS.pm10.unit,
+                        source: ALERT_THRESHOLDS.pm10.source,
+                        icon: 'fas fa-skull-crossbones'
+                    });
+                } else if (metrics.pm10 >= ALERT_THRESHOLDS.pm10.warning) {
+                    alerts.push({
+                        id: 'pm10-warning',
+                        type: 'warning',
+                        title: 'PM1.0 Warning',
+                        message: `PM1.0 levels are elevated at ${metrics.pm10} ${ALERT_THRESHOLDS.pm10.unit}`,
+                        parameter: 'PM1.0',
+                        value: metrics.pm10,
+                        threshold: ALERT_THRESHOLDS.pm10.warning,
+                        unit: ALERT_THRESHOLDS.pm10.unit,
+                        source: ALERT_THRESHOLDS.pm10.source,
+                        icon: 'fas fa-exclamation-triangle'
+                    });
+                }
+                
+                // Check CO2
+                if (metrics.co2 >= ALERT_THRESHOLDS.co2.danger) {
+                    alerts.push({
+                        id: 'co2-danger',
+                        type: 'danger',
+                        title: 'CO2 Critical Alert',
+                        message: `CO2 levels are dangerously high at ${metrics.co2} ${ALERT_THRESHOLDS.co2.unit}`,
+                        parameter: 'CO2',
+                        value: metrics.co2,
+                        threshold: ALERT_THRESHOLDS.co2.danger,
+                        unit: ALERT_THRESHOLDS.co2.unit,
+                        source: ALERT_THRESHOLDS.co2.source,
+                        icon: 'fas fa-lungs'
+                    });
+                } else if (metrics.co2 >= ALERT_THRESHOLDS.co2.warning) {
+                    alerts.push({
+                        id: 'co2-warning',
+                        type: 'warning',
+                        title: 'CO2 Warning',
+                        message: `CO2 levels are elevated at ${metrics.co2} ${ALERT_THRESHOLDS.co2.unit}`,
+                        parameter: 'CO2',
+                        value: metrics.co2,
+                        threshold: ALERT_THRESHOLDS.co2.warning,
+                        unit: ALERT_THRESHOLDS.co2.unit,
+                        source: ALERT_THRESHOLDS.co2.source,
+                        icon: 'fas fa-exclamation-triangle'
+                    });
+                }
+                
+                // Check CO
+                if (metrics.co >= ALERT_THRESHOLDS.co.danger) {
+                    alerts.push({
+                        id: 'co-danger',
+                        type: 'danger',
+                        title: 'CO Critical Alert',
+                        message: `Carbon monoxide levels are dangerously high at ${metrics.co} ${ALERT_THRESHOLDS.co.unit}`,
+                        parameter: 'CO',
+                        value: metrics.co,
+                        threshold: ALERT_THRESHOLDS.co.danger,
+                        unit: ALERT_THRESHOLDS.co.unit,
+                        source: ALERT_THRESHOLDS.co.source,
+                        icon: 'fas fa-skull-crossbones'
+                    });
+                } else if (metrics.co >= ALERT_THRESHOLDS.co.warning) {
+                    alerts.push({
+                        id: 'co-warning',
+                        type: 'warning',
+                        title: 'CO Warning',
+                        message: `Carbon monoxide levels are elevated at ${metrics.co} ${ALERT_THRESHOLDS.co.unit}`,
+                        parameter: 'CO',
+                        value: metrics.co,
+                        threshold: ALERT_THRESHOLDS.co.warning,
+                        unit: ALERT_THRESHOLDS.co.unit,
+                        source: ALERT_THRESHOLDS.co.source,
+                        icon: 'fas fa-exclamation-triangle'
+                    });
+                }
+                
+                // Check Temperature
+                if (metrics.temperature >= ALERT_THRESHOLDS.temperature.dangerHigh || 
+                    metrics.temperature <= ALERT_THRESHOLDS.temperature.dangerLow) {
+                    const direction = metrics.temperature >= ALERT_THRESHOLDS.temperature.dangerHigh ? 'high' : 'low';
+                    alerts.push({
+                        id: 'temp-danger',
+                        type: 'danger',
+                        title: 'Temperature Critical Alert',
+                        message: `Temperature is dangerously ${direction} at ${Math.round(metrics.temperature)}${ALERT_THRESHOLDS.temperature.unit}`,
+                        parameter: 'Temperature',
+                        value: metrics.temperature,
+                        threshold: direction === 'high' ? ALERT_THRESHOLDS.temperature.dangerHigh : ALERT_THRESHOLDS.temperature.dangerLow,
+                        unit: ALERT_THRESHOLDS.temperature.unit,
+                        source: ALERT_THRESHOLDS.temperature.source,
+                        icon: 'fas fa-temperature-high'
+                    });
+                } else if (metrics.temperature >= ALERT_THRESHOLDS.temperature.warningHigh || 
+                           metrics.temperature <= ALERT_THRESHOLDS.temperature.warningLow) {
+                    const direction = metrics.temperature >= ALERT_THRESHOLDS.temperature.warningHigh ? 'high' : 'low';
+                    alerts.push({
+                        id: 'temp-warning',
+                        type: 'warning',
+                        title: 'Temperature Warning',
+                        message: `Temperature is ${direction} at ${Math.round(metrics.temperature)}${ALERT_THRESHOLDS.temperature.unit}`,
+                        parameter: 'Temperature',
+                        value: metrics.temperature,
+                        threshold: direction === 'high' ? ALERT_THRESHOLDS.temperature.warningHigh : ALERT_THRESHOLDS.temperature.warningLow,
+                        unit: ALERT_THRESHOLDS.temperature.unit,
+                        source: ALERT_THRESHOLDS.temperature.source,
+                        icon: 'fas fa-thermometer-half'
+                    });
+                }
+                
+                // Check Humidity
+                if (metrics.humidity >= ALERT_THRESHOLDS.humidity.dangerHigh || 
+                    metrics.humidity <= ALERT_THRESHOLDS.humidity.dangerLow) {
+                    const direction = metrics.humidity >= ALERT_THRESHOLDS.humidity.dangerHigh ? 'high' : 'low';
+                    alerts.push({
+                        id: 'humidity-danger',
+                        type: 'danger',
+                        title: 'Humidity Critical Alert',
+                        message: `Humidity is dangerously ${direction} at ${Math.round(metrics.humidity)}${ALERT_THRESHOLDS.humidity.unit}`,
+                        parameter: 'Humidity',
+                        value: metrics.humidity,
+                        threshold: direction === 'high' ? ALERT_THRESHOLDS.humidity.dangerHigh : ALERT_THRESHOLDS.humidity.dangerLow,
+                        unit: ALERT_THRESHOLDS.humidity.unit,
+                        source: ALERT_THRESHOLDS.humidity.source,
+                        icon: 'fas fa-tint'
+                    });
+                } else if (metrics.humidity >= ALERT_THRESHOLDS.humidity.warningHigh || 
+                           metrics.humidity <= ALERT_THRESHOLDS.humidity.warningLow) {
+                    const direction = metrics.humidity >= ALERT_THRESHOLDS.humidity.warningHigh ? 'high' : 'low';
+                    alerts.push({
+                        id: 'humidity-warning',
+                        type: 'warning',
+                        title: 'Humidity Warning',
+                        message: `Humidity is ${direction} at ${Math.round(metrics.humidity)}${ALERT_THRESHOLDS.humidity.unit}`,
+                        parameter: 'Humidity',
+                        value: metrics.humidity,
+                        threshold: direction === 'high' ? ALERT_THRESHOLDS.humidity.warningHigh : ALERT_THRESHOLDS.humidity.warningLow,
+                        unit: ALERT_THRESHOLDS.humidity.unit,
+                        source: ALERT_THRESHOLDS.humidity.source,
+                        icon: 'fas fa-tint'
+                    });
+                }
+                
+                // Check Light Intensity - FIXED: Use direct percentage value from Blynk
+                const lightPercentage = metrics.light; // Blynk already provides percentage
+                if (lightPercentage >= ALERT_THRESHOLDS.light.dangerHigh || 
+                    lightPercentage <= ALERT_THRESHOLDS.light.dangerLow) {
+                    const direction = lightPercentage >= ALERT_THRESHOLDS.light.dangerHigh ? 'high' : 'low';
+                    alerts.push({
+                        id: 'light-danger',
+                        type: 'danger',
+                        title: 'Light Intensity Critical Alert',
+                        message: `Light intensity is dangerously ${direction} at ${lightPercentage}${ALERT_THRESHOLDS.light.unit}`,
+                        parameter: 'Light',
+                        value: lightPercentage,
+                        threshold: direction === 'high' ? ALERT_THRESHOLDS.light.dangerHigh : ALERT_THRESHOLDS.light.dangerLow,
+                        unit: ALERT_THRESHOLDS.light.unit,
+                        source: ALERT_THRESHOLDS.light.source,
+                        icon: direction === 'high' ? 'fas fa-sun' : 'fas fa-moon'
+                    });
+                } else if (lightPercentage >= ALERT_THRESHOLDS.light.warningHigh || 
+                           lightPercentage <= ALERT_THRESHOLDS.light.warningLow) {
+                    const direction = lightPercentage >= ALERT_THRESHOLDS.light.warningHigh ? 'high' : 'low';
+                    alerts.push({
+                        id: 'light-warning',
+                        type: 'warning',
+                        title: 'Light Intensity Warning',
+                        message: `Light intensity is ${direction} at ${lightPercentage}${ALERT_THRESHOLDS.light.unit}`,
+                        parameter: 'Light',
+                        value: lightPercentage,
+                        threshold: direction === 'high' ? ALERT_THRESHOLDS.light.warningHigh : ALERT_THRESHOLDS.light.warningLow,
+                        unit: ALERT_THRESHOLDS.light.unit,
+                        source: ALERT_THRESHOLDS.light.source,
+                        icon: direction === 'high' ? 'fas fa-sun' : 'fas fa-moon'
+                    });
+                }
+                
+                return alerts;
+            },
+            
+            displayAlert(alert) {
+                const alertContainer = document.getElementById('alertContainer');
+                
+                // Don't show duplicate alerts
+                if (this.activeAlerts.has(alert.id)) {
+                    return;
+                }
+                
+                const alertElement = document.createElement('div');
+                alertElement.className = `alert ${alert.type}`;
+                alertElement.id = `alert-${alert.id}`;
+                
+                alertElement.innerHTML = `
+                    <div class="alert-header">
+                        <div class="alert-title">
+                            <i class="${alert.icon} alert-icon"></i>
+                            ${alert.title}
+                        </div>
+                        <button class="alert-close" onclick="alertSystem.removeAlert('${alert.id}')">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="alert-message">
+                        ${alert.message}
+                    </div>
+                    <div class="alert-threshold">
+                        Threshold: ${alert.threshold} ${alert.unit} (${alert.source})
+                    </div>
+                `;
+                
+                // Add pulsing animation for danger alerts
+                if (alert.type === 'danger') {
+                    alertElement.classList.add('pulse');
+                }
+                
+                alertContainer.appendChild(alertElement);
+                this.activeAlerts.set(alert.id, alert);
+                
+                // Send Telegram alert for danger alerts or first-time warnings
+                if (alert.type === 'danger' || !this.activeAlerts.has(alert.id)) {
+                    telegramAlertSystem.sendAlert(alert);
+                }
+                
+                // Auto-remove warning alerts after 30 seconds, danger alerts after 60 seconds
+                const autoRemoveTime = alert.type === 'danger' ? 60000 : 30000;
+                setTimeout(() => {
+                    this.removeAlert(alert.id);
+                }, autoRemoveTime);
+            },
+            
+            removeAlert(alertId) {
+                const alertElement = document.getElementById(`alert-${alertId}`);
+                if (alertElement) {
+                    alertElement.style.transform = 'translateX(100%)';
+                    alertElement.style.opacity = '0';
+                    setTimeout(() => {
+                        alertElement.remove();
+                        this.activeAlerts.delete(alertId);
+                    }, 500);
+                }
+            },
+            
+            updateAlerts(metrics) {
+                const newAlerts = this.checkAlerts(metrics);
+                
+                // Remove alerts that are no longer active
+                for (const [alertId, alert] of this.activeAlerts) {
+                    const stillActive = newAlerts.some(newAlert => newAlert.id === alertId);
+                    if (!stillActive) {
+                        this.removeAlert(alertId);
+                    }
+                }
+                
+                // Add new alerts
+                newAlerts.forEach(alert => {
+                    this.displayAlert(alert);
+                });
+                
+                // Update alert badge on header if there are active alerts
+                this.updateAlertBadge();
+                
+                // Clean up old Telegram alerts
+                telegramAlertSystem.cleanupOldAlerts();
+            },
+            
+            updateAlertBadge() {
+                const dangerAlerts = Array.from(this.activeAlerts.values()).filter(alert => alert.type === 'danger');
+                const warningAlerts = Array.from(this.activeAlerts.values()).filter(alert => alert.type === 'warning');
+                
+                // You could add a badge to the header here if desired
+                // For now, we'll just log the count
+                if (dangerAlerts.length > 0 || warningAlerts.length > 0) {
+                    console.log(`Active alerts: ${dangerAlerts.length} danger, ${warningAlerts.length} warning`);
+                }
+            }
+        };
+
+        // Initialize the map
+        function initMap() {
+            // Create the map
+            sensorMap = L.map('sensorMap').setView(SENSOR_LOCATION, 18);
+            
+            // Add tile layer (OpenStreetMap)
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(sensorMap);
+            
+            // Add sensor marker
+            sensorMarker = L.marker(SENSOR_LOCATION)
+                .addTo(sensorMap)
+                .bindPopup(`
+                    <div style="text-align: center;">
+                        <h3 style="margin: 5px 0;">AtmosIoT Sensor</h3>
+                        <p style="margin: 5px 0;">BPUT Campus</p>
+                        <p style="margin: 5px 0; font-size: 0.9em;">Lat: ${SENSOR_LOCATION[0].toFixed(6)}</p>
+                        <p style="margin: 5px 0; font-size: 0.9em;">Lng: ${SENSOR_LOCATION[1].toFixed(6)}</p>
+                    </div>
+                `)
+                .openPopup();
+            
+            // Add coverage circle (20 meters)
+            coverageCircle = L.circle(SENSOR_LOCATION, {
+                color: '#5c6bc0',
+                fillColor: '#5c6bc0',
+                fillOpacity: 0.3,
+                radius: COVERAGE_RADIUS
+            }).addTo(sensorMap);
+            
+            // Add map controls
+            L.control.scale().addTo(sensorMap);
+            
+            // Set up map event listeners
+            document.getElementById('zoomToSensor').addEventListener('click', function() {
+                sensorMap.setView(SENSOR_LOCATION, 18);
+            });
+            
+            document.getElementById('toggleCoverage').addEventListener('click', function() {
+                if (sensorMap.hasLayer(coverageCircle)) {
+                    sensorMap.removeLayer(coverageCircle);
+                    this.classList.remove('active');
+                } else {
+                    sensorMap.addLayer(coverageCircle);
+                    this.classList.add('active');
+                }
+            });
+        }
+
+        // Rain Animation Functions
+        function createRain() {
+            const rainContainer = document.getElementById('rainContainer');
+            const dropCount = 100;
+            
+            // Clear existing rain drops
+            rainContainer.innerHTML = '';
+            
+            for (let i = 0; i < dropCount; i++) {
+                const drop = document.createElement('div');
+                drop.classList.add('rain-drop');
+                
+                // Random position and animation properties
+                const left = Math.random() * 100;
+                const animationDuration = Math.random() * 1 + 0.5; // 0.5 to 1.5 seconds
+                const animationDelay = Math.random() * 2;
+                const opacity = Math.random() * 0.7 + 0.3; // 0.3 to 1
+                
+                drop.style.left = `${left}%`;
+                drop.style.animationDuration = `${animationDuration}s`;
+                drop.style.animationDelay = `${animationDelay}s`;
+                drop.style.opacity = opacity;
+                
+                rainContainer.appendChild(drop);
+            }
+        }
+        
+        function toggleRain(isRaining) {
+            const rainContainer = document.getElementById('rainContainer');
+            
+            if (isRaining) {
+                createRain();
+                rainContainer.style.opacity = '0.6';
+            } else {
+                rainContainer.style.opacity = '0';
+                // Keep the drops but make them invisible
+                setTimeout(() => {
+                    if (!state.isRaining) {
+                        rainContainer.innerHTML = '';
+                    }
+                }, 1500);
+            }
+        }
+
+        // Simplified Day/Night Mode Functions
+        function createStars() {
+            const starsContainer = document.getElementById('stars');
+            const starCount = 150;
+            
+            for (let i = 0; i < starCount; i++) {
+                const star = document.createElement('div');
+                star.classList.add('star');
+                
+                // Random position
+                const x = Math.random() * 100;
+                const y = Math.random() * 100;
+                
+                // Random size (0.5px to 2px)
+                const size = Math.random() * 1.5 + 0.5;
+                
+                // Random animation delay
+                const delay = Math.random() * 4;
+                
+                star.style.left = `${x}%`;
+                star.style.top = `${y}%`;
+                star.style.width = `${size}px`;
+                star.style.height = `${size}px`;
+                star.style.animationDelay = `${delay}s`;
+                
+                starsContainer.appendChild(star);
+            }
+        }
+        
+        function updateDayNightMode() {
+            const now = new Date();
+            const hour = now.getHours();
+            const body = document.body;
+            const skyBackground = document.querySelector('.sky-background');
+            const stars = document.getElementById('stars');
+            const themeToggle = document.getElementById('themeToggle');
+            
+            // Daytime: 6 AM to 6 PM
+            const isDaytime = hour >= 6 && hour < 18;
+            
+            if (isDaytime) {
+                body.classList.remove('night-mode');
+                skyBackground.style.background = 'var(--day-sky)';
+                stars.style.opacity = '0';
+                themeToggle.innerHTML = '<i class="fas fa-moon"></i>';
+            } else {
+                body.classList.add('night-mode');
+                skyBackground.style.background = 'var(--night-sky)';
+                stars.style.opacity = '1';
+                themeToggle.innerHTML = '<i class="fas fa-sun"></i>';
+            }
+        }
+        
+        function toggleDayNightMode() {
+            const body = document.body;
+            const skyBackground = document.querySelector('.sky-background');
+            const stars = document.getElementById('stars');
+            const themeToggle = document.getElementById('themeToggle');
+            
+            if (body.classList.contains('night-mode')) {
+                // Switch to day mode
+                body.classList.remove('night-mode');
+                skyBackground.style.background = 'var(--day-sky)';
+                stars.style.opacity = '0';
+                themeToggle.innerHTML = '<i class="fas fa-moon"></i>';
+            } else {
+                // Switch to night mode
+                body.classList.add('night-mode');
+                skyBackground.style.background = 'var(--night-sky)';
+                stars.style.opacity = '1';
+                themeToggle.innerHTML = '<i class="fas fa-sun"></i>';
+            }
+        }
+
+        // News API Integration Functions
+        async function fetchNewsFromAPI() {
+            const baseUrl = 'https://newsapi.org/v2/everything';
+            
+            // Search for environmental news with specific keywords
+            const query = '(pollution OR "air quality" OR "climate change" OR "weather" OR "AQI" OR "environment" OR "carbon emissions" OR "global warming") AND (health OR policy OR alert OR update)';
+            
+            try {
+                const response = await fetch(`${baseUrl}?q=${encodeURIComponent(query)}&language=en&sortBy=publishedAt&pageSize=8&apiKey=${NEWS_API_KEY}`);
+                
+                if (!response.ok) {
+                    throw new Error(`News API error: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                if (data.articles && data.articles.length > 0) {
+                    return data.articles.slice(0, 8).map(article => ({
+                        title: article.title,
+                        description: article.description || 'No description available',
+                        source: article.source.name,
+                        publishedAt: formatTimeAgo(article.publishedAt),
+                        url: article.url,
+                        image: article.urlToImage || getDefaultNewsImage()
+                    }));
+                } else {
+                    throw new Error('No articles found');
+                }
+            } catch (error) {
+                console.error('Error fetching news from API:', error);
+                // Fall back to mock data if API fails
+                return mockData.generateNewsData();
+            }
+        }
+
+        // Helper function to get default news images
+        function getDefaultNewsImage() {
+            const defaultImages = [
+                'https://images.unsplash.com/photo-1581833971358-2c8b550f87b3?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=600&q=80',
+                'https://images.unsplash.com/photo-1569163139394-de4e4f43e4e3?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=600&q=80',
+                'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=600&q=80',
+                'https://images.unsplash.com/photo-1551288049-bebda4e38f71?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=600&q=80'
+            ];
+            return defaultImages[Math.floor(Math.random() * defaultImages.length)];
+        }
+
+        // Helper function to format time ago
+        function formatTimeAgo(dateString) {
+            const date = new Date(dateString);
+            const now = new Date();
+            const diffMs = now - date;
+            const diffMins = Math.floor(diffMs / 60000);
+            const diffHours = Math.floor(diffMs / 3600000);
+            const diffDays = Math.floor(diffMs / 86400000);
+            
+            if (diffMins < 1) {
+                return 'Just now';
+            } else if (diffMins < 60) {
+                return `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
+            } else if (diffHours < 24) {
+                return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+            } else if (diffDays < 7) {
+                return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+            } else {
+                return date.toLocaleDateString();
+            }
+        }
+
+        // Mock data generator for Future Trends (kept as dummy data)
+        const mockData = {
+            generateFuturePredictions(parameter, timeRange) {
+                const data = [];
+                let points = 24; // Default for 24 hours
+                
+                if (timeRange === '7d') points = 7 * 24; // 7 days
+                if (timeRange === '30d') points = 30 * 24; // 30 days
+                
+                let baseValue;
+                switch(parameter) {
+                    case 'pm25': baseValue = 35; break;
+                    case 'pm10': baseValue = 15; break;
+                    case 'co2': baseValue = 480; break;
+                    case 'co': baseValue = 1.2; break;
+                    case 'temperature': baseValue = 22; break;
+                    case 'humidity': baseValue = 55; break;
+                    case 'light': baseValue = 50; break; // Percentage
+                }
+                
+                // Generate future dates
+                const now = new Date();
+                
+                for (let i = 0; i < points; i++) {
+                    // Add some realistic variation with trend
+                    const trend = Math.sin(i / (points/10)) * (baseValue * 0.2);
+                    const random = (Math.random() - 0.5) * (baseValue * 0.1);
+                    const value = Math.max(0, baseValue + trend + random);
+                    
+                    data.push({
+                        timestamp: new Date(now.getTime() + (i + 1) * 3600000).toISOString(),
+                        value: Math.round(value),
+                        confidence: Math.max(0.7, 0.95 - (i * 0.01)) // Confidence decreases over time
+                    });
+                }
+                
+                return data;
+            },
+            
+            generateRegionalData() {
+                return [
+                    { name: "BPUT Campus", pm25: 35, pm10: 15, co2: 450, co: 1.2, temperature: 22, humidity: 45, light: 75 },
+                    { name: "Abhigyan Chowk", pm25: 25, pm10: 10, co2: 420, co: 0.8, temperature: 18, humidity: 60, light: 50 },
+                    { name: "Chennd", pm25: 40, pm10: 20, co2: 480, co: 1.5, temperature: 25, humidity: 55, light: 90 },
+                    { name: "Kalinga Vihar", pm25: 180, pm10: 80, co2: 600, co: 3.2, temperature: 30, humidity: 40, light: 100 },
+                    { name: "DAV Chowk", pm25: 15, pm10: 8, co2: 390, co: 0.5, temperature: 20, humidity: 50, light: 60 }
+                ];
+            },
+            
+            // Keep mock news data as fallback
+            generateNewsData() {
+                return [
+                    {
+                        title: "Global Air Quality Improvements Noted in Latest UN Report",
+                        description: "The United Nations Environment Programme reports significant improvements in air quality across major cities worldwide, attributing the progress to stricter emissions regulations.",
+                        source: "Environmental News Network",
+                        publishedAt: "2 hours ago",
+                        url: "#",
+                        image: "https://images.unsplash.com/photo-1581833971358-2c8b550f87b3?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=600&q=80"
+                    },
+                    {
+                        title: "New IoT Sensors Revolutionize Environmental Monitoring",
+                        description: "Advanced IoT sensor networks are providing unprecedented real-time data on air quality, enabling more accurate predictions and timely interventions.",
+                        source: "Tech Environmental Review",
+                        publishedAt: "5 hours ago",
+                        url: "#",
+                        image: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=600&q=80"
+                    },
+                    {
+                        title: "Climate Change Impact on Urban Air Quality Intensifies",
+                        description: "Researchers find that climate change is exacerbating air pollution in urban areas, with significant health implications for vulnerable populations.",
+                        source: "Science Environmental Journal",
+                        publishedAt: "1 day ago",
+                        url: "#",
+                        image: "https://images.unsplash.com/photo-1569163139394-de4e4f43e4e3?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=600&q=80"
+                    },
+                    {
+                        title: "Community-Led Initiatives Show Promise in Reducing Pollution",
+                        description: "Grassroots environmental initiatives are demonstrating measurable impacts on local air quality, inspiring similar efforts worldwide.",
+                        source: "Community Action News",
+                        publishedAt: "2 days ago",
+                        url: "#",
+                        image: "https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=600&q=80"
+                    }
+                ];
+            }
+        };
+
+        // Dashboard state
+        const state = {
+            currentMetrics: {
+                pm25: 0,
+                pm10: 0,
+                co2: 0,
+                co: 0,
+                temperature: 0,
+                humidity: 0,
+                light: 0,
+                rain: false
+            },
+            currentRegion: "BPUT Campus",
+            temperatureUnit: 'celsius',
+            historicalParameter: 'pm25',
+            historicalTimeRange: 'day',
+            predictionParameter: 'pm25',
+            predictionTimeRange: '24h',
+            regions: mockData.generateRegionalData(),
+            historicalData: [],
+            futurePredictions: [],
+            charts: {},
+            lastUpdate: new Date(),
+            isRaining: false
+        };
+
+        // DOM elements
+        const elements = {
+            datetime: document.getElementById('datetime'),
+            airQualityMetrics: document.getElementById('airQualityMetrics'),
+            temperatureValue: document.getElementById('temperatureValue'),
+            feelsLike: document.getElementById('feelsLike'),
+            weatherIcon: document.getElementById('weatherIcon'),
+            celsiusBtn: document.getElementById('celsiusBtn'),
+            fahrenheitBtn: document.getElementById('fahrenheitBtn'),
+            humidityValue: document.getElementById('humidityValue'),
+            humidityFill: document.getElementById('humidityFill'),
+            lightValue: document.getElementById('lightValue'),
+            lightIcon: document.getElementById('lightIcon'),
+            lightStatus: document.getElementById('lightStatus'),
+            parameterSelect: document.getElementById('parameterSelect'),
+            dayBtn: document.getElementById('dayBtn'),
+            weekBtn: document.getElementById('weekBtn'),
+            monthBtn: document.getElementById('monthBtn'),
+            predictionParameterSelect: document.getElementById('predictionParameterSelect'),
+            prediction24hBtn: document.getElementById('prediction24hBtn'),
+            prediction7dBtn: document.getElementById('prediction7dBtn'),
+            prediction30dBtn: document.getElementById('prediction30dBtn'),
+            regionList: document.getElementById('regionList'),
+            historicalChart: document.getElementById('historicalChart'),
+            futureTrendsChart: document.getElementById('futureTrendsChart'),
+            regionalChart: document.getElementById('regionalChart'),
+            lastUpdate: document.getElementById('lastUpdate'),
+            confidenceFill: document.getElementById('confidenceFill'),
+            confidenceValue: document.getElementById('confidenceValue'),
+            newsContainer: document.getElementById('newsContainer'),
+            refreshNewsBtn: document.getElementById('refreshNewsBtn')
+        };
+
+        // Utility functions
+        function getAQICategory(value, type) {
+            const thresholds = {
+                pm25: { good: 12, moderate: 35 },
+                pm10: { good: 5, moderate: 15 },
+                co2: { good: 450, moderate: 800 },
+                co: { good: 2, moderate: 9 }
+            };
+            
+            if (value <= thresholds[type].good) return 'good';
+            if (value <= thresholds[type].moderate) return 'moderate';
+            return 'poor';
+        }
+
+        function getTrendIcon() {
+            return Math.random() > 0.5 ? '<i class="fas fa-arrow-up"></i>' : '<i class="fas fa-arrow-down"></i>';
+        }
+
+        function celsiusToFahrenheit(c) {
+            return (c * 9/5) + 32;
+        }
+
+        // REMOVED: Function to convert lux to percentage - Blynk already provides percentage
+
+        function updateDateTime() {
+            const now = new Date();
+            const options = { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            };
+            elements.datetime.textContent = now.toLocaleDateString('en-US', options);
+        }
+
+        function updateLastUpdate() {
+            const now = new Date();
+            const diffMs = now - state.lastUpdate;
+            const diffSecs = Math.floor(diffMs / 1000);
+            
+            if (diffSecs < 60) {
+                elements.lastUpdate.textContent = 'Just now';
+            } else if (diffSecs < 3600) {
+                const mins = Math.floor(diffSecs / 60);
+                elements.lastUpdate.textContent = `${mins} minute${mins > 1 ? 's' : ''} ago`;
+            } else {
+                const hours = Math.floor(diffSecs / 3600);
+                elements.lastUpdate.textContent = `${hours} hour${hours > 1 ? 's' : ''} ago`;
+            }
+        }
+
+        // Load and display news
+        async function loadNews() {
+            // Show loading state
+            elements.newsContainer.innerHTML = `
+                <div class="news-loading">
+                    <div class="news-spinner"></div>
+                    <p>Loading latest environmental news...</p>
+                </div>
+            `;
+            
+            try {
+                const newsData = await fetchNewsFromAPI();
+                
+                let newsHTML = '<div class="stories-grid">';
+                
+                newsData.forEach(article => {
+                    // Truncate description to max 40 words
+                    const truncatedDescription = article.description.split(' ').slice(0, 40).join(' ') + 
+                        (article.description.split(' ').length > 40 ? '...' : '');
+                    
+                    newsHTML += `
+                        <div class="story-card">
+                            <img src="${article.image}" alt="${article.title}" class="story-image" onerror="this.src='${getDefaultNewsImage()}'">
+                            <div class="story-source">
+                                <i class="fas fa-newspaper"></i>
+                                ${article.source}
+                            </div>
+                            <h3 class="story-title">${article.title}</h3>
+                            <p class="story-description">${truncatedDescription}</p>
+                            <div class="story-meta">
+                                <span>${article.publishedAt}</span>
+                                <a href="${article.url}" target="_blank" class="read-more">Read More <i class="fas fa-arrow-right"></i></a>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                newsHTML += '</div>';
+                elements.newsContainer.innerHTML = newsHTML;
+            } catch (error) {
+                console.error('Error loading news:', error);
+                // Fall back to mock data
+                const newsData = mockData.generateNewsData();
+                
+                let newsHTML = '<div class="stories-grid">';
+                
+                newsData.forEach(article => {
+                    newsHTML += `
+                        <div class="story-card">
+                            <img src="${article.image}" alt="${article.title}" class="story-image">
+                            <div class="story-source">
+                                <i class="fas fa-newspaper"></i>
+                                ${article.source}
+                            </div>
+                            <h3 class="story-title">${article.title}</h3>
+                            <p class="story-description">${article.description}</p>
+                            <div class="story-meta">
+                                <span>${article.publishedAt}</span>
+                                <a href="${article.url}" class="read-more">Read More <i class="fas fa-arrow-right"></i></a>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                newsHTML += '</div>';
+                elements.newsContainer.innerHTML = newsHTML;
+            }
+        }
+
+        // Set up news refresh button
+        function setupNewsRefresh() {
+            elements.refreshNewsBtn.addEventListener('click', async () => {
+                // Disable button and show loading state
+                elements.refreshNewsBtn.disabled = true;
+                elements.refreshNewsBtn.innerHTML = '<i class="fas fa-sync-alt spinner"></i> Refreshing...';
+                
+                // Load fresh news
+                await loadNews();
+                
+                // Re-enable button and restore original text
+                elements.refreshNewsBtn.disabled = false;
+                elements.refreshNewsBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Refresh News';
+            });
+        }
+
+        function updateAirQualityMetrics() {
+            const metrics = state.currentMetrics;
+            const html = `
+                <div class="metric ${getAQICategory(metrics.pm25, 'pm25')}">
+                    <div class="metric-name">PM2.5</div>
+                    <div class="metric-value">${metrics.pm25}</div>
+                    <div class="metric-unit">µg/m³</div>
+                    <div class="metric-trend">${getTrendIcon()}</div>
+                </div>
+                <div class="metric ${getAQICategory(metrics.pm10, 'pm10')}">
+                    <div class="metric-name">PM1.0</div>
+                    <div class="metric-value">${metrics.pm10}</div>
+                    <div class="metric-unit">µg/m³</div>
+                    <div class="metric-trend">${getTrendIcon()}</div>
+                </div>
+                <div class="metric ${getAQICategory(metrics.co2, 'co2')}">
+                    <div class="metric-name">CO2</div>
+                    <div class="metric-value">${metrics.co2}</div>
+                    <div class="metric-unit">ppm</div>
+                    <div class="metric-trend">${getTrendIcon()}</div>
+                </div>
+                <div class="metric ${getAQICategory(metrics.co, 'co')}">
+                    <div class="metric-name">CO</div>
+                    <div class="metric-value">${metrics.co}</div>
+                    <div class="metric-unit">ppm</div>
+                    <div class="metric-trend">${getTrendIcon()}</div>
+                </div>
+            `;
+            elements.airQualityMetrics.innerHTML = html;
+            
+            // Add animation to updated metrics
+            document.querySelectorAll('.metric').forEach(metric => {
+                metric.classList.add('metric-update');
+                setTimeout(() => {
+                    metric.classList.remove('metric-update');
+                }, 500);
+            });
+        }
+
+        function updateTemperature() {
+            const temp = state.currentMetrics.temperature;
+            const displayTemp = state.temperatureUnit === 'celsius' ? 
+                temp : celsiusToFahrenheit(temp);
+            const unit = state.temperatureUnit === 'celsius' ? '°C' : '°F';
+            
+            elements.temperatureValue.innerHTML = `${Math.round(displayTemp)}<span class="temp-unit">${unit}</span>`;
+            
+            // Calculate feels like (simplified)
+            const feelsLike = temp + (state.currentMetrics.humidity / 100) * 5;
+            const displayFeelsLike = state.temperatureUnit === 'celsius' ? 
+                feelsLike : celsiusToFahrenheit(feelsLike);
+            elements.feelsLike.textContent = `Feels like: ${Math.round(displayFeelsLike)}${unit}`;
+            
+            // Update weather icon based on temperature and rain
+            if (state.isRaining) {
+                elements.weatherIcon.innerHTML = '<i class="fas fa-cloud-rain"></i>';
+            } else if (temp > 25) {
+                elements.weatherIcon.innerHTML = '<i class="fas fa-sun"></i>';
+            } else if (temp > 15) {
+                elements.weatherIcon.innerHTML = '<i class="fas fa-cloud-sun"></i>';
+            } else {
+                elements.weatherIcon.innerHTML = '<i class="fas fa-cloud"></i>';
+            }
+        }
+
+        function updateHumidity() {
+            const humidity = state.currentMetrics.humidity;
+            elements.humidityValue.textContent = `${humidity}%`;
+            elements.humidityFill.style.height = `${humidity}%`;
+        }
+
+        function updateLightIntensity() {
+            // FIXED: Blynk already provides percentage, no conversion needed
+            const lightPercentage = state.currentMetrics.light;
+            elements.lightValue.textContent = `${lightPercentage}%`;
+            
+            // Update light icon and status based on light intensity
+            const lightIcon = elements.lightIcon;
+            const lightStatus = elements.lightStatus;
+            
+            if (lightPercentage < 20) {
+                lightIcon.className = 'fas fa-moon light-sun night';
+                lightStatus.textContent = 'Very Dark';
+            } else if (lightPercentage < 40) {
+                lightIcon.className = 'fas fa-cloud light-sun cloudy';
+                lightStatus.textContent = 'Dim';
+            } else if (lightPercentage < 70) {
+                lightIcon.className = 'fas fa-sun light-sun';
+                lightStatus.textContent = 'Moderate';
+            } else {
+                lightIcon.className = 'fas fa-sun light-sun';
+                lightStatus.textContent = 'Bright';
+            }
+        }
+
+        function updateRegionalList() {
+            let html = '';
+            state.regions.forEach(region => {
+                const isActive = region.name === state.currentRegion;
+                const aqi = Math.floor((region.pm25 / 250) * 100); // Simplified AQI calculation
+                html += `
+                    <div class="region-item ${isActive ? 'active' : ''}" data-region="${region.name}">
+                        <div class="region-name">${region.name}</div>
+                        <div class="region-aqi">AQI: ${aqi}</div>
+                    </div>
+                `;
+            });
+            elements.regionList.innerHTML = html;
+            
+            // Add event listeners
+            document.querySelectorAll('.region-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const regionName = item.getAttribute('data-region');
+                    switchRegion(regionName);
+                });
+            });
+        }
+
+        function switchRegion(regionName) {
+            state.currentRegion = regionName;
+            const region = state.regions.find(r => r.name === regionName);
+            state.currentMetrics = { ...state.currentMetrics, ...region };
+            updateDashboard();
+            updateRegionalChart();
+        }
+
+        // Create a mapping between parameter names and database column names
+        const parameterToColumnMap = {
+            'pm25': 'pm2_5',
+            'pm10': 'pm10',
+            'co2': 'co2',
+            'co': 'co',
+            'temperature': 'temperature',
+            'humidity': 'humidity',
+            'light': 'light'
+        };
+
+        function updateHistoricalChart() {
+            const ctx = elements.historicalChart.getContext('2d');
+            
+            // Destroy existing chart if it exists
+            if (state.charts.historical) {
+                state.charts.historical.destroy();
+            }
+            
+            const data = state.historicalData;
+            
+            // Check if we have data
+            if (!data || data.length === 0) {
+                console.log('No historical data available');
+                // Display a message when no data is available
+                ctx.font = "16px Arial";
+                ctx.fillStyle = "#666";
+                ctx.textAlign = "center";
+                ctx.fillText("No historical data available", elements.historicalChart.width / 2, elements.historicalChart.height / 2);
+                return;
+            }
+            
+            const labels = data.map(d => {
+                const date = new Date(d.created_at);
+                if (state.historicalTimeRange === 'day') {
+                    return date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+                } else if (state.historicalTimeRange === 'week') {
+                    return date.toLocaleDateString([], {month: 'short', day: 'numeric'});
+                } else {
+                    return date.toLocaleDateString([], {month: 'short', day: 'numeric'});
+                }
+            });
+            
+            // Get the correct database column name for the selected parameter
+            const dbColumnName = parameterToColumnMap[state.historicalParameter];
+            const values = data.map(d => {
+                const value = d[dbColumnName];
+                // Handle cases where value might be null or undefined
+                // For light values, use direct value (already percentage from Blynk)
+                return value !== null && value !== undefined ? value : 0;
+            });
+            
+            // Determine color based on parameter
+            let borderColor = '#5c6bc0';
+            if (state.historicalParameter === 'pm25') borderColor = '#f44336';
+            if (state.historicalParameter === 'pm10') borderColor = '#ff5722';
+            if (state.historicalParameter === 'co2') borderColor = '#ff9800';
+            if (state.historicalParameter === 'co') borderColor = '#9c27b0';
+            if (state.historicalParameter === 'temperature') borderColor = '#e91e63';
+            if (state.historicalParameter === 'humidity') borderColor = '#2196f3';
+            if (state.historicalParameter === 'light') borderColor = '#ffc107';
+            
+            state.charts.historical = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: state.historicalParameter.toUpperCase(),
+                        data: values,
+                        borderColor: borderColor,
+                        backgroundColor: borderColor + '20',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4,
+                        pointBackgroundColor: borderColor,
+                        pointBorderColor: '#ffffff',
+                        pointBorderWidth: 2,
+                        pointRadius: 4,
+                        pointHoverRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                            titleColor: '#333',
+                            bodyColor: '#666',
+                            borderColor: borderColor,
+                            borderWidth: 1
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                color: '#666'
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            },
+                            ticks: {
+                                color: '#666'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateFutureTrendsChart() {
+            const ctx = elements.futureTrendsChart.getContext('2d');
+            
+            // Destroy existing chart if it exists
+            if (state.charts.futureTrends) {
+                state.charts.futureTrends.destroy();
+            }
+            
+            const data = state.futurePredictions;
+            const labels = data.map(d => {
+                const date = new Date(d.timestamp);
+                if (state.predictionTimeRange === '24h') {
+                    return date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+                } else {
+                    return date.toLocaleDateString([], {month: 'short', day: 'numeric'});
+                }
+            });
+            
+            const values = data.map(d => d.value);
+            const confidences = data.map(d => d.confidence);
+            
+            // Determine color based on parameter
+            let borderColor = '#9c27b0';
+            let fillColor = '#9c27b020';
+            
+            if (state.predictionParameter === 'pm25') {
+                borderColor = '#f44336';
+                fillColor = '#f4433620';
+            } else if (state.predictionParameter === 'pm10') {
+                borderColor = '#ff5722';
+                fillColor = '#ff572220';
+            } else if (state.predictionParameter === 'co2') {
+                borderColor = '#ff9800';
+                fillColor = '#ff980020';
+            } else if (state.predictionParameter === 'temperature') {
+                borderColor = '#e91e63';
+                fillColor = '#e91e6320';
+            } else if (state.predictionParameter === 'humidity') {
+                borderColor = '#2196f3';
+                fillColor = '#2196f320';
+            } else if (state.predictionParameter === 'light') {
+                borderColor = '#ffc107';
+                fillColor = '#ffc10720';
+            }
+            
+            // Update confidence display
+            const avgConfidence = confidences.reduce((a, b) => a + b, 0) / confidences.length;
+            const confidencePercent = Math.round(avgConfidence * 100);
+            elements.confidenceFill.style.width = `${confidencePercent}%`;
+            elements.confidenceValue.textContent = `${confidencePercent}%`;
+            
+            state.charts.futureTrends = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: `${state.predictionParameter.toUpperCase()} Prediction`,
+                        data: values,
+                        borderColor: borderColor,
+                        backgroundColor: fillColor,
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4,
+                        pointBackgroundColor: borderColor,
+                        pointBorderColor: '#ffffff',
+                        pointBorderWidth: 2,
+                        pointRadius: 3,
+                        pointHoverRadius: 5,
+                        borderDash: [5, 5]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                            titleColor: '#333',
+                            bodyColor: '#666',
+                            borderColor: borderColor,
+                            borderWidth: 1
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                color: '#666'
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            },
+                            ticks: {
+                                color: '#666'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateRegionalChart() {
+            const ctx = elements.regionalChart.getContext('2d');
+            
+            // Destroy existing chart if it exists
+            if (state.charts.regional) {
+                state.charts.regional.destroy();
+            }
+            
+            const labels = state.regions.map(r => r.name);
+            const data = state.regions.map(r => {
+                // Calculate a composite AQI score (simplified)
+                return Math.floor((r.pm25 / 250 + r.co2 / 1000 + r.co / 10 + r.pm10 / 100) * 25);
+            });
+            
+            // Color bars based on AQI value
+            const backgroundColors = data.map(value => {
+                if (value < 50) return '#4caf50'; // Good
+                if (value < 100) return '#ff9800'; // Moderate
+                return '#f44336'; // Poor
+            });
+            
+            state.charts.regional = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Air Quality Index',
+                        data: data,
+                        backgroundColor: backgroundColors,
+                        borderColor: backgroundColors,
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            title: {
+                                display: true,
+                                text: 'AQI Score'
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            },
+                            ticks: {
+                                color: '#666'
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                color: '#666'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateDashboard() {
+            updateAirQualityMetrics();
+            updateTemperature();
+            updateHumidity();
+            updateLightIntensity();
+            updateRegionalList();
+            updateLastUpdate();
+            
+            // Update rain animation based on sensor data
+            if (state.currentMetrics.rain !== state.isRaining) {
+                state.isRaining = state.currentMetrics.rain;
+                toggleRain(state.isRaining);
+            }
+            
+            // Check for alerts
+            alertSystem.updateAlerts(state.currentMetrics);
+        }
+
+        // Fetch current data from Blynk API
+        async function fetchCurrentData() {
+            try {
+                console.log("Fetching current data from Blynk API...");
+                const response = await fetch(BLYNK_API_URL);
+                const data = await response.json();
+
+                console.log("Blynk API data:", data);
+                
+                state.currentMetrics = {
+                    pm25: data.pm25 || 0,
+                    pm10: data.pm10 || 0,
+                    co2: data.co2 || 0,
+                    co: data.co || 0,
+                    temperature: data.temperature || 0,
+                    humidity: data.humidity || 0,
+                    light: data.light || 0, // Blynk already provides percentage
+                    rain: data.rain === 1  // Convert to boolean
+                };
+                state.lastUpdate = new Date();
+                console.log("Updated state.currentMetrics:", state.currentMetrics);
+                updateDashboard();
+            } catch (error) {
+                console.error('Error fetching current data:', error);
+            }
+        }
+
+        // Fetch historical data from Supabase
+        async function fetchHistoricalData() {
+            try {
+                let startDate = new Date();
+                
+                // Calculate start date based on selected time range
+                if (state.historicalTimeRange === 'day') {
+                    startDate.setHours(startDate.getHours() - 24);
+                } else if (state.historicalTimeRange === 'week') {
+                    startDate.setDate(startDate.getDate() - 7);
+                } else if (state.historicalTimeRange === 'month') {
+                    startDate.setDate(startDate.getDate() - 30);
+                }
+                
+                console.log("Fetching historical data from:", startDate);
+                const { data, error } = await supabase
+                    .from('airquality')
+                    .select('*')
+                    .gte('created_at', startDate.toISOString())
+                    .order('created_at', { ascending: true });
+
+                if (error) {
+                    console.error('Error fetching historical data:', error);
+                    return;
+                }
+
+                state.historicalData = data || [];
+                console.log('Fetched historical data:', state.historicalData);
+                updateHistoricalChart();
+            } catch (error) {
+                console.error('Error in fetchHistoricalData:', error);
+            }
+        }
+
+        function loadFuturePredictions() {
+            state.futurePredictions = mockData.generateFuturePredictions(
+                state.predictionParameter, 
+                state.predictionTimeRange
+            );
+            updateFutureTrendsChart();
+        }
+
+        // Initialize the dashboard
+        function init() {
+            // Create stars for night mode
+            createStars();
+            
+            // Set up day/night mode based on current time
+            updateDayNightMode();
+            
+            // Set up real-time clock
+            updateDateTime();
+            setInterval(updateDateTime, 1000);
+            
+            // Set up theme toggle
+            document.getElementById('themeToggle').addEventListener('click', toggleDayNightMode);
+            
+            // Set up temperature unit toggle
+            elements.celsiusBtn.addEventListener('click', () => {
+                state.temperatureUnit = 'celsius';
+                elements.celsiusBtn.classList.add('active');
+                elements.fahrenheitBtn.classList.remove('active');
+                updateTemperature();
+            });
+            
+            elements.fahrenheitBtn.addEventListener('click', () => {
+                state.temperatureUnit = 'fahrenheit';
+                elements.fahrenheitBtn.classList.add('active');
+                elements.celsiusBtn.classList.remove('active');
+                updateTemperature();
+            });
+            
+            // Set up historical chart controls
+            elements.parameterSelect.addEventListener('change', (e) => {
+                state.historicalParameter = e.target.value;
+                fetchHistoricalData();
+            });
+            
+            const timeRangeButtons = document.querySelectorAll('.time-range-btn');
+            timeRangeButtons.forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    timeRangeButtons.forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    
+                    if (e.target.id === 'dayBtn') state.historicalTimeRange = 'day';
+                    if (e.target.id === 'weekBtn') state.historicalTimeRange = 'week';
+                    if (e.target.id === 'monthBtn') state.historicalTimeRange = 'month';
+                    
+                    fetchHistoricalData();
+                });
+            });
+            
+            // Set up future trends chart controls
+            elements.predictionParameterSelect.addEventListener('change', (e) => {
+                state.predictionParameter = e.target.value;
+                loadFuturePredictions();
+            });
+            
+            const predictionRangeButtons = document.querySelectorAll('.prediction-range-btn');
+            predictionRangeButtons.forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    predictionRangeButtons.forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    
+                    if (e.target.id === 'prediction24hBtn') state.predictionTimeRange = '24h';
+                    if (e.target.id === 'prediction7dBtn') state.predictionTimeRange = '7d';
+                    if (e.target.id === 'prediction30dBtn') state.predictionTimeRange = '30d';
+                    
+                    loadFuturePredictions();
+                });
+            });
+            
+            // Set up news refresh button
+            setupNewsRefresh();
+            
+            // Initialize map
+            initMap();
+            
+            // Initialize data
+            state.regions = mockData.generateRegionalData();
+            fetchCurrentData();
+            fetchHistoricalData();
+            loadFuturePredictions();
+            updateRegionalChart();
+            
+            // Load news
+            loadNews();
+            
+            // Set up real-time data updates
+            setInterval(fetchCurrentData, 1000); // Update every 1 second from Blynk API
+            
+            // Set up Supabase real-time subscription for live updates
+            supabase
+                .channel('airquality-changes')
+                .on('postgres_changes', 
+                    { 
+                        event: 'INSERT', 
+                        schema: 'public', 
+                        table: 'airquality' 
+                    }, 
+                    (payload) => {
+                        console.log('New data received from Supabase:', payload);
+                        fetchHistoricalData();
+                    }
+                )
+                .subscribe();
+        }
+
+        // Start the application
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
